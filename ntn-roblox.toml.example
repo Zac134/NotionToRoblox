@@ -1,0 +1,14 @@
+# Copy to ntn-roblox.toml in your project root (the directory you run ntn-roblox from).
+# Safe to commit in your game repo — secrets belong in .env only.
+
+[notion]
+dev_product_db_id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+game_pass_db_id   = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+badge_db_id       = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+[roblox]
+universe_id = 1234567890
+# badge_payment_source = "user"
+
+[logging]
+# level = "info"

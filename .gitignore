@@ -1,0 +1,10 @@
+node_modules/
+dist/
+release/
+*.zip
+.env
+.env.local
+ntn-roblox.toml
+*.log
+.DS_Store
+.cursor/
