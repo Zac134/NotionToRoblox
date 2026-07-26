@@ -1,0 +1,10 @@
+[notion]
+dev_product_db_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+game_pass_db_id   = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+badge_db_id       = "cccccccccccccccccccccccccccccccc"
+
+[roblox]
+universe_id = 1234567890
+
+[logging]
+level = "info"

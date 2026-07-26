@@ -4,7 +4,7 @@ release/
 *.zip
 .env
 .env.local
-ntn-roblox.toml
+/ntn-roblox.toml
 *.log
 .DS_Store
 .cursor/
