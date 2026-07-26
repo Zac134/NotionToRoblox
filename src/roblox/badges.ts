@@ -1,4 +1,4 @@
-import { config } from "../config.js";
+import { getConfig } from "../config.js";
 import type { BadgeInput, BadgeUpdateInput, RobloxBadge } from "../types.js";
 import {
   BADGES_PUBLIC_BASE,
@@ -41,7 +41,10 @@ export class BadgeQuotaExhaustedError extends Error {
 }
 
 function pathWithUniverse(template: string): string {
-  return template.replace("{universeId}", String(config.ROBLOX_UNIVERSE_ID));
+  return template.replace(
+    "{universeId}",
+    String(getConfig().ROBLOX_UNIVERSE_ID),
+  );
 }
 
 function pathWithBadge(template: string, badgeId: number): string {
@@ -60,7 +63,7 @@ export async function listBadges(): Promise<RobloxBadge[]> {
     }
 
     const response = await robloxJson<BadgeListResponse>({
-      path: `/v1/universes/${config.ROBLOX_UNIVERSE_ID}/badges?${query.toString()}`,
+      path: `/v1/universes/${getConfig().ROBLOX_UNIVERSE_ID}/badges?${query.toString()}`,
       baseUrl: BADGES_PUBLIC_BASE,
       useApiKey: false,
     });
@@ -74,7 +77,7 @@ export async function listBadges(): Promise<RobloxBadge[]> {
 
 export async function getFreeBadgeQuota(): Promise<number> {
   const quota = await robloxJson<number>({
-    path: `/v1/universes/${config.ROBLOX_UNIVERSE_ID}/free-badges-quota`,
+    path: `/v1/universes/${getConfig().ROBLOX_UNIVERSE_ID}/free-badges-quota`,
     baseUrl: BADGES_PUBLIC_BASE,
     useApiKey: false,
   });
@@ -97,7 +100,8 @@ export async function createBadge(
     { name: "name", value: input.name },
     {
       name: "paymentSourceType",
-      value: PAYMENT_SOURCE_BY_CONFIG[config.ROBLOX_BADGE_PAYMENT_SOURCE],
+      value:
+        PAYMENT_SOURCE_BY_CONFIG[getConfig().ROBLOX_BADGE_PAYMENT_SOURCE],
     },
     { name: "expectedCost", value: EXPECTED_COST_FREE },
     { name: "isActive", value: input.isActive },

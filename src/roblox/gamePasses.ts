@@ -1,4 +1,4 @@
-import { config } from "../config.js";
+import { getConfig } from "../config.js";
 import type {
   GamePassInput,
   GamePassUpdateInput,
@@ -32,7 +32,10 @@ interface GamePassCreateResponse {
 }
 
 function pathWithUniverse(template: string): string {
-  return template.replace("{universeId}", String(config.ROBLOX_UNIVERSE_ID));
+  return template.replace(
+    "{universeId}",
+    String(getConfig().ROBLOX_UNIVERSE_ID),
+  );
 }
 
 function pathWithGamePass(template: string, gamePassId: number): string {

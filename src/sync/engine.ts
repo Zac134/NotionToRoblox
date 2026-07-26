@@ -1,4 +1,4 @@
-import { queryAllPagesForType } from "../notion/client.js";
+import { databaseIdForType, queryAllPagesForType } from "../notion/client.js";
 import {
   isMappingError,
   mapBadgePage,
@@ -7,9 +7,11 @@ import {
 } from "../notion/mapRow.js";
 import {
   writebackError,
+  writebackRobloxId,
   writebackSkipped,
   writebackSuccess,
 } from "../notion/writeback.js";
+import { ensureSyncStatusSchemas } from "../notion/schema.js";
 import {
   BadgeQuotaExhaustedError,
   createBadge,
@@ -45,6 +47,7 @@ import {
 } from "./candidates.js";
 import {
   collectNotionRobloxIds,
+  countOrphans,
   findOrphans,
   printOrphanReport,
   type OrphanItem,
@@ -54,6 +57,7 @@ import {
 export interface SyncOptions {
   dryRun: boolean;
   reportOnly: boolean;
+  force: boolean;
   typeFilter?: ResourceType;
 }
 
@@ -63,6 +67,7 @@ export interface SyncResult {
   skipped: number;
   errors: number;
   mappingErrors: number;
+  orphans: number;
 }
 
 const ALL_TYPES: ResourceType[] = ["developer-product", "game-pass", "badge"];
@@ -82,12 +87,15 @@ interface TypeSyncContext {
 
 export async function runSync(options: SyncOptions): Promise<SyncResult> {
   const types = resolveTypes(options.typeFilter);
+  await ensureSyncStatusSchemas(types);
+
   const result: SyncResult = {
     created: 0,
     updated: 0,
     skipped: 0,
     errors: 0,
     mappingErrors: 0,
+    orphans: 0,
   };
 
   const orphanSections: OrphanReportSection[] = [];
@@ -101,7 +109,7 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
     result.mappingErrors += mappingErrors.length;
 
     for (const mappingError of mappingErrors) {
-      await handleMappingError(mappingError, skipWriteback);
+      await handleMappingError(mappingError, skipWriteback, type);
       result.errors += 1;
     }
 
@@ -116,10 +124,11 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
       type,
       rows,
       mappingErrors,
-      candidates: filterActionable(classifyRows(rows)),
+      candidates: filterActionable(classifyRows(rows, { force: options.force })),
     });
   }
 
+  result.orphans = countOrphans(orphanSections);
   printOrphanReport(orphanSections);
 
   if (options.reportOnly) {
@@ -149,17 +158,22 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
         badgeQuota,
       });
 
-      if (rowResult === "created") {
+      if (rowResult.outcome === "created") {
         result.created += 1;
-        if (type === "badge" && badgeQuota !== undefined) {
-          badgeQuota -= 1;
-        }
-      } else if (rowResult === "updated") {
+      } else if (rowResult.outcome === "updated") {
         result.updated += 1;
-      } else if (rowResult === "skipped") {
+      } else if (rowResult.outcome === "skipped") {
         result.skipped += 1;
       } else {
         result.errors += 1;
+      }
+
+      if (
+        type === "badge" &&
+        badgeQuota !== undefined &&
+        rowResult.consumedBadgeQuota
+      ) {
+        badgeQuota -= 1;
       }
     }
   }
@@ -235,17 +249,23 @@ async function listRobloxItemsForOrphans(
 
 type RowOutcome = "created" | "updated" | "skipped" | "error";
 
+export interface ProcessCandidateResult {
+  outcome: RowOutcome;
+  consumedBadgeQuota?: boolean;
+}
+
 interface ProcessContext {
   dryRun: boolean;
   badgeQuota?: number;
 }
 
-async function processCandidate(
+export async function processCandidate(
   candidate: SyncCandidate,
   context: ProcessContext,
-): Promise<RowOutcome> {
+): Promise<ProcessCandidateResult> {
   const { row } = candidate;
   const label = `${TYPE_LABELS[row.type]} "${row.name}" (${row.pageId})`;
+  const databaseId = databaseIdForType(row.type);
 
   try {
     if (candidate.action === "create") {
@@ -258,17 +278,17 @@ async function processCandidate(
       warnQuotaExhausted(row.name);
       logger.warn(`${label}: ${reason}`);
       if (!context.dryRun) {
-        await writebackSkipped(row.pageId, reason);
+        await writebackSkipped(row.pageId, databaseId, reason);
       }
-      return "skipped";
+      return { outcome: "skipped" };
     }
 
     const message = formatError(error);
     logger.error(`${label}: ${message}`);
     if (!context.dryRun) {
-      await writebackError(row.pageId, message);
+      await writebackError(row.pageId, databaseId, message);
     }
-    return "error";
+    return { outcome: "error" };
   }
 }
 
@@ -276,7 +296,8 @@ async function processCreate(
   row: NotionRow,
   label: string,
   context: ProcessContext,
-): Promise<RowOutcome> {
+): Promise<ProcessCandidateResult> {
+  const databaseId = databaseIdForType(row.type);
   if (row.type === "badge") {
     const quota = context.badgeQuota ?? 0;
     if (quota <= 0) {
@@ -284,9 +305,9 @@ async function processCreate(
       warnQuotaExhausted(row.name);
       logger.warn(`${label}: ${reason}`);
       if (!context.dryRun) {
-        await writebackSkipped(row.pageId, reason);
+        await writebackSkipped(row.pageId, databaseId, reason);
       }
-      return "skipped";
+      return { outcome: "skipped" };
     }
   }
 
@@ -294,38 +315,83 @@ async function processCreate(
     const reason = "Price is required for create";
     logger.error(`${label}: ${reason}`);
     if (!context.dryRun) {
-      await writebackError(row.pageId, reason);
+      await writebackError(row.pageId, databaseId, reason);
     }
-    return "error";
+    return { outcome: "error" };
   }
 
   const iconHint = row.iconUrl ? "yes" : "no";
 
   if (context.dryRun) {
     logger.info(`[DRY-RUN] CREATE ${label} (icon=${iconHint})`);
-    return "created";
+    return { outcome: "created" };
   }
 
   const icon = await resolveIcon(row.iconUrl);
 
   const robloxId = await createRobloxItem(row, icon, context.badgeQuota ?? 0);
-  await writebackSuccess(row.pageId, robloxId);
-  logger.info(`Created ${label} → Roblox ID ${robloxId}`);
-  return "created";
+  const consumedBadgeQuota = row.type === "badge";
+
+  let idWritebackOk = true;
+  try {
+    await writebackRobloxId(row.pageId, databaseId, robloxId);
+  } catch (error) {
+    idWritebackOk = false;
+    logger.error(
+      `${label}: Roblox ID writeback failed (${robloxId}): ${formatError(error)}`,
+    );
+  }
+
+  let robloxIdPersisted = idWritebackOk;
+
+  try {
+    await writebackSuccess(row.pageId, databaseId, robloxId);
+    logger.info(`Created ${label} → Roblox ID ${robloxId}`);
+    return {
+      outcome: "created",
+      ...(consumedBadgeQuota ? { consumedBadgeQuota: true } : {}),
+    };
+  } catch (error) {
+    const message = formatError(error);
+    logger.error(`${label}: Sync success writeback failed: ${message}`);
+
+    try {
+      await writebackError(row.pageId, databaseId, message, robloxId);
+      robloxIdPersisted = true;
+    } catch (writebackErr) {
+      logger.error(
+        `${label}: Error writeback failed: ${formatError(writebackErr)}`,
+      );
+    }
+
+    if (!robloxIdPersisted) {
+      logger.error(
+        `CRITICAL: Roblox item created but Notion writeback completely failed. ` +
+          `pageId=${row.pageId} robloxId=${robloxId}. ` +
+          `Manually set Roblox ID ${robloxId} on the Notion page and set Sync Status to Synced or Error.`,
+      );
+    }
+
+    return {
+      outcome: "error",
+      ...(consumedBadgeQuota ? { consumedBadgeQuota: true } : {}),
+    };
+  }
 }
 
 async function processUpdate(
   row: NotionRow,
   label: string,
   context: ProcessContext,
-): Promise<RowOutcome> {
+): Promise<ProcessCandidateResult> {
+  const databaseId = databaseIdForType(row.type);
   if (row.robloxId === null) {
     const reason = "Roblox ID is required for update";
     logger.error(`${label}: ${reason}`);
     if (!context.dryRun) {
-      await writebackError(row.pageId, reason);
+      await writebackError(row.pageId, databaseId, reason);
     }
-    return "error";
+    return { outcome: "error" };
   }
 
   const iconHint = row.iconUrl ? "yes" : "no";
@@ -334,15 +400,15 @@ async function processUpdate(
     logger.info(
       `[DRY-RUN] UPDATE ${label} (Roblox ID ${row.robloxId}, icon=${iconHint})`,
     );
-    return "updated";
+    return { outcome: "updated" };
   }
 
   const icon = await resolveIcon(row.iconUrl);
 
   await updateRobloxItem(row, icon);
-  await writebackSuccess(row.pageId, row.robloxId);
+  await writebackSuccess(row.pageId, databaseId, row.robloxId);
   logger.info(`Updated ${label} (Roblox ID ${row.robloxId})`);
-  return "updated";
+  return { outcome: "updated" };
 }
 
 async function createRobloxItem(
@@ -428,10 +494,15 @@ async function resolveIcon(
 async function handleMappingError(
   error: RowMappingError,
   skipWriteback: boolean,
+  type: ResourceType,
 ): Promise<void> {
   logger.error(`Mapping error for page ${error.pageId}: ${error.message}`);
   if (!skipWriteback) {
-    await writebackError(error.pageId, error.message);
+    await writebackError(
+      error.pageId,
+      databaseIdForType(type),
+      error.message,
+    );
   }
 }
 
@@ -448,6 +519,7 @@ function logSummary(result: SyncResult, options: SyncOptions): void {
     `updated=${result.updated}`,
     `skipped=${result.skipped}`,
     `errors=${result.errors}`,
+    `orphans=${result.orphans}`,
   ];
 
   if (result.mappingErrors > 0) {
