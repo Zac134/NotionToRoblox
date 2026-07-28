@@ -38,7 +38,7 @@ Or add it to your project's `rokit.toml`:
 
 ```toml
 [tools]
-ntn-roblox = "Zac134/NotionToRoblox@0.1.0"
+ntn-roblox = "Zac134/NotionToRoblox@0.1.1"
 ```
 
 ```bash
@@ -243,7 +243,7 @@ Typical layout when using Rokit:
 my-game/
   .env                  # secrets (gitignored)
   ntn-roblox.toml       # parent page ID, DB IDs, universe_id (safe to commit)
-  rokit.toml            # ntn-roblox = "Zac134/NotionToRoblox@0.1.0"
+  rokit.toml            # ntn-roblox = "Zac134/NotionToRoblox@0.1.1"
   default.project.json
 ```
 
@@ -396,7 +396,7 @@ Release artifacts are standalone Bun-compiled binaries packaged as Rokit-compati
 **Prerequisites:** [Bun](https://bun.sh) on `PATH`, and `zip` or Python 3
 
 ```bash
-npm run compile -- 0.1.0 bun-darwin-arm64 ./release
+npm run compile -- 0.1.1 bun-darwin-arm64 ./release
 ```
 
 | `bun-target` | Zip suffix |
@@ -416,13 +416,13 @@ Output: `NotionToRoblox-<version>-<os>-<arch>.zip` containing a single `NotionTo
 2. Align version strings in `package.json`, README, and the commented consumer example in this repo's `rokit.toml` (the line stays commented here; consumer projects uncomment it in their own `rokit.toml`)
 3. Tag and push:
    ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
-   ```
+   git tag v0.1.1
+   git push origin v0.1.1
+```
 4. GitHub Actions builds all six targets and attaches zip assets to the Release
 5. Verify from a clean Roblox project:
    ```bash
-   rokit add Zac134/NotionToRoblox@0.1.0 ntn-roblox
+   rokit add Zac134/NotionToRoblox@0.1.1 ntn-roblox
    rokit install
    ntn-roblox sync --help
    ```
