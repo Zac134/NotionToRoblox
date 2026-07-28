@@ -1,6 +1,6 @@
 {
   "name": "notion-to-roblox",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "CLI to sync Notion database records to Roblox Developer Products, Game Passes, and Badges via Open Cloud API",
   "license": "MIT",
@@ -24,6 +24,7 @@
     "check": "tsc --noEmit",
     "test": "node --experimental-test-module-mocks --import tsx --import ./test/setup.ts --test test/**/*.test.ts",
     "init": "tsx src/cli.ts init",
+    "create-databases": "tsx src/cli.ts create-databases",
     "sync": "tsx src/cli.ts",
     "start": "node dist/cli.js",
     "compile": "bash scripts/package-release.sh"

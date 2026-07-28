@@ -17,7 +17,7 @@ export function loadTomlFile(
       error.code === "ENOENT"
     ) {
       throw new Error(
-        `Missing config file: ${path} (copy ntn-roblox.toml.example)`,
+        `Missing config file: ${path} (run \`ntn-roblox init\` or copy ntn-roblox.toml.example)`,
       );
     }
 

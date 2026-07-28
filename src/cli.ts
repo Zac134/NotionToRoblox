@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 
-import { loadInitConfig, loadSyncConfig, setConfig } from "./config.js";
+import {
+  loadCreateDatabasesConfig,
+  loadSyncConfig,
+  setConfig,
+} from "./config.js";
+import { runCreateDatabases } from "./createDatabases/runCreateDatabases.js";
 import { loadEnvFile } from "./env.js";
 import { runInit } from "./init/runInit.js";
 import type { ResourceType } from "./types.js";
 import { setLogLevel } from "./util/logger.js";
 
-type Command = "sync" | "init";
+type Command = "sync" | "init" | "create-databases";
 
 interface SyncParsedArgs {
   command: "sync";
@@ -19,13 +24,21 @@ interface SyncParsedArgs {
 
 interface InitParsedArgs {
   command: "init";
-  parentPageId?: string;
-  writeToml: boolean;
   force: boolean;
   help: boolean;
 }
 
-type ParsedArgs = SyncParsedArgs | InitParsedArgs;
+interface CreateDatabasesParsedArgs {
+  command: "create-databases";
+  parentPageId?: string;
+  force: boolean;
+  help: boolean;
+}
+
+type ParsedArgs =
+  | SyncParsedArgs
+  | InitParsedArgs
+  | CreateDatabasesParsedArgs;
 
 const RESOURCE_TYPES: ResourceType[] = [
   "developer-product",
@@ -33,22 +46,30 @@ const RESOURCE_TYPES: ResourceType[] = [
   "badge",
 ];
 
+const COMMANDS: Command[] = ["sync", "init", "create-databases"];
+
 function printUsage(): void {
   console.error(`Usage:
   ntn-roblox init [options]
+  ntn-roblox create-databases [options]
   ntn-roblox sync [options]
 
 Development:
   npm run init -- [options]
+  npm run create-databases -- [options]
   npm run sync -- [options]
 
 Commands:
-  init                 Create Notion databases for sync
+  init                 Create .env and ntn-roblox.toml in the current directory
+  create-databases     Create Notion databases and write IDs to ntn-roblox.toml
   sync                 Run full synchronization (default)
 
 Init options:
+  --force              Overwrite existing .env / ntn-roblox.toml
+  --help, -h           Show this help message
+
+Create-databases options:
   --parent-page-id=<id>  Notion parent page ID (overrides ntn-roblox.toml)
-  --write-toml           Write created database IDs to ntn-roblox.toml
   --force                Create new databases even if IDs are already configured
   --help, -h             Show this help message
 
@@ -62,7 +83,10 @@ Sync options:
 }
 
 function parseSyncArg(arg: string, parsed: SyncParsedArgs): void {
-  if (arg.startsWith("--parent-page-id=") || arg === "--write-toml") {
+  if (
+    arg.startsWith("--parent-page-id=") ||
+    arg === "--write-toml"
+  ) {
     throw new Error(`Unknown argument: ${arg}`);
   }
   if (arg === "--dry-run") {
@@ -94,7 +118,28 @@ function parseInitArg(arg: string, parsed: InitParsedArgs): void {
   if (
     arg === "--dry-run" ||
     arg === "--report-only" ||
-    arg.startsWith("--type=")
+    arg.startsWith("--type=") ||
+    arg.startsWith("--parent-page-id=") ||
+    arg === "--write-toml"
+  ) {
+    throw new Error(`Unknown argument: ${arg}`);
+  }
+  if (arg === "--force") {
+    parsed.force = true;
+    return;
+  }
+  throw new Error(`Unknown argument: ${arg}`);
+}
+
+function parseCreateDatabasesArg(
+  arg: string,
+  parsed: CreateDatabasesParsedArgs,
+): void {
+  if (
+    arg === "--dry-run" ||
+    arg === "--report-only" ||
+    arg.startsWith("--type=") ||
+    arg === "--write-toml"
   ) {
     throw new Error(`Unknown argument: ${arg}`);
   }
@@ -108,10 +153,6 @@ function parseInitArg(arg: string, parsed: InitParsedArgs): void {
     parsed.parentPageId = value;
     return;
   }
-  if (arg === "--write-toml") {
-    parsed.writeToml = true;
-    return;
-  }
   if (arg === "--force") {
     parsed.force = true;
     return;
@@ -119,12 +160,16 @@ function parseInitArg(arg: string, parsed: InitParsedArgs): void {
   throw new Error(`Unknown argument: ${arg}`);
 }
 
+function isCommand(value: string): value is Command {
+  return (COMMANDS as string[]).includes(value);
+}
+
 function parseArgs(argv: string[]): ParsedArgs {
   let command: Command | undefined;
   let help = false;
 
   for (const arg of argv) {
-    if (arg === "sync" || arg === "init") {
+    if (isCommand(arg)) {
       if (command) {
         throw new Error(`Unknown argument: ${arg}`);
       }
@@ -144,7 +189,12 @@ function parseArgs(argv: string[]): ParsedArgs {
 
   const initParsed: InitParsedArgs = {
     command: "init",
-    writeToml: false,
+    force: false,
+    help: false,
+  };
+
+  const createDatabasesParsed: CreateDatabasesParsedArgs = {
+    command: "create-databases",
     force: false,
     help: false,
   };
@@ -154,7 +204,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       help = true;
       continue;
     }
-    if (arg === "sync" || arg === "init") {
+    if (isCommand(arg)) {
       continue;
     }
     if (!arg.startsWith("-")) {
@@ -163,14 +213,21 @@ function parseArgs(argv: string[]): ParsedArgs {
 
     if (resolvedCommand === "sync") {
       parseSyncArg(arg, syncParsed);
-    } else {
+    } else if (resolvedCommand === "init") {
       parseInitArg(arg, initParsed);
+    } else {
+      parseCreateDatabasesArg(arg, createDatabasesParsed);
     }
   }
 
   if (resolvedCommand === "init") {
     initParsed.help = help;
     return initParsed;
+  }
+
+  if (resolvedCommand === "create-databases") {
+    createDatabasesParsed.help = help;
+    return createDatabasesParsed;
   }
 
   syncParsed.help = help;
@@ -188,12 +245,16 @@ async function main(): Promise<void> {
   }
 
   if (args.command === "init") {
-    const initConfig = loadInitConfig({ parentPageId: args.parentPageId });
-    setLogLevel(initConfig.LOG_LEVEL);
-    await runInit(initConfig, {
-      force: args.force,
-      writeToml: args.writeToml,
+    await runInit({ force: args.force });
+    return;
+  }
+
+  if (args.command === "create-databases") {
+    const config = loadCreateDatabasesConfig({
+      parentPageId: args.parentPageId,
     });
+    setLogLevel(config.LOG_LEVEL);
+    await runCreateDatabases(config, { force: args.force });
     return;
   }
 

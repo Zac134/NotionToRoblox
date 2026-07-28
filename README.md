@@ -18,7 +18,7 @@ NotionToRoblox is a CLI that treats Notion databases as the source of truth and 
 
 - [Rokit](https://github.com/rojo-rbx/rokit)
 - Notion Internal Integration with access to your parent page and databases (see [Notion setup](#notion-setup))
-- Roblox Creator Dashboard API Key for your universe (see [Roblox setup](#roblox-setup); required for `sync`, not for `init`)
+- Roblox Creator Dashboard API Key for your universe (see [Roblox setup](#roblox-setup); required for `sync`, not for `init` / `create-databases`)
 
 ---
 
@@ -38,7 +38,7 @@ Or add it to your project's `rokit.toml`:
 
 ```toml
 [tools]
-ntn-roblox = "Zac134/NotionToRoblox@0.1.0"
+ntn-roblox = "Zac134/NotionToRoblox@0.1.1"
 ```
 
 ```bash
@@ -49,31 +49,20 @@ ntn-roblox sync --help
 ### Setup
 
 ```bash
-cp .env.example .env
-cp ntn-roblox.toml.example ntn-roblox.toml
+ntn-roblox init
 ```
 
-Both files are read from `process.cwd()`, so run `ntn-roblox` from the directory that contains them (typically your Roblox project root).
-
-**When installed via Rokit only** (the release zip contains the binary, not the templates), fetch examples from GitHub:
-
-```bash
-curl -fsSLO https://raw.githubusercontent.com/Zac134/NotionToRoblox/v0.1.0/.env.example
-curl -fsSLO https://raw.githubusercontent.com/Zac134/NotionToRoblox/v0.1.0/ntn-roblox.toml.example
-cp .env.example .env
-cp ntn-roblox.toml.example ntn-roblox.toml
-```
-
-Replace `v0.1.0` with the release tag you installed via Rokit.
+Creates `.env` and `ntn-roblox.toml` in the current directory (skips files that already exist; pass `--force` to overwrite). Both are read from `process.cwd()`, so run commands from the directory that contains them (typically your Roblox project root).
 
 #### First-time workflow
 
-1. Copy the example files (above).
+1. Run `ntn-roblox init`.
 2. Create a Notion integration and set `NOTION_TOKEN` in `.env` (see [Notion setup](#notion-setup)).
 3. Pick a **parent page** in Notion (existing page or new empty page) and **share it with the integration**.
-4. Run `ntn-roblox init --write-toml`, passing `--parent-page-id=<id>` or setting `notion.parent_page_id` in `ntn-roblox.toml` first. This creates the three databases and writes their IDs into `ntn-roblox.toml`.
-5. Complete **Roblox setup** — set `ROBLOX_API_KEY` in `.env` and `roblox.universe_id` in `ntn-roblox.toml`.
-6. Run `ntn-roblox sync`.
+4. Set `notion.parent_page_id` in `ntn-roblox.toml` (or pass `--parent-page-id` to the next step).
+5. Run `ntn-roblox create-databases`. This creates the three databases and writes their IDs into `ntn-roblox.toml`.
+6. Complete **Roblox setup** — set `ROBLOX_API_KEY` in `.env` and `roblox.universe_id` in `ntn-roblox.toml`.
+7. Run `ntn-roblox sync`.
 
 <a id="notion-setup"></a>
 <details open>
@@ -86,24 +75,24 @@ Replace `v0.1.0` with the release tag you installed via Rokit.
 3. **Capabilities** (integration settings → Capabilities):
    - **Read content** — required for `sync` (fetch rows from databases)
    - **Update content** — required for `sync` (write back `Roblox ID`, `Sync Status`, `Sync Error`, and `Last Synced At`)
-   - **Insert content** — required for `init` (creates the three databases under your parent page)
+   - **Insert content** — required for `create-databases` (creates the three databases under your parent page)
 
    For `sync` only, **Insert content** is not required unless you create rows manually outside Notion.
 
-4. **Connect the parent page to the integration:** open the page where databases should live → **⋯** → **Connections** / **Share** → **Invite** → select your integration. `init` verifies it can access this page before creating databases.
+4. **Connect the parent page to the integration:** open the page where databases should live → **⋯** → **Connections** / **Share** → **Invite** → select your integration. `create-databases` verifies it can access this page before creating databases.
 
 5. **Create databases** — choose one:
 
-   **Recommended — `init`**
+   **Recommended — `create-databases`**
 
    ```bash
    # Set parent_page_id in ntn-roblox.toml, or pass --parent-page-id
-   ntn-roblox init --write-toml
+   ntn-roblox create-databases
    ```
 
-   Creates **Developer Products**, **Game Passes**, and **Badges** under the parent page with the schema in [Notion database schema](#notion-database-schema), then writes database IDs into `ntn-roblox.toml` when `--write-toml` is set. Only `NOTION_TOKEN` is required; database IDs may be empty in the TOML beforehand.
+   Creates **Developer Products**, **Game Passes**, and **Badges** under the parent page with the schema in [Notion database schema](#notion-database-schema), then writes database IDs into `ntn-roblox.toml`. Only `NOTION_TOKEN` is required; database IDs may be empty in the TOML beforehand.
 
-   If database IDs are already configured, `init` exits unless you pass `--force` (creates new databases anyway; update or remove stale IDs afterward).
+   If database IDs are already configured, `create-databases` exits unless you pass `--force` (creates new databases anyway; IDs in TOML are updated).
 
    **Manual — create databases yourself**
 
@@ -122,7 +111,7 @@ Replace `v0.1.0` with the release tag you installed via Rokit.
 
    Hyphens in the URL are optional; paste the ID as shown in Notion.
 
-6. **`Sync Status` options (manual setup):** Add all four options before syncing (as select options or status options). New rows should start as `Pending`. After a successful sync the tool sets `Synced`; failures set `Error` or `Skipped`. (`init` creates these options automatically.)
+6. **`Sync Status` options (manual setup):** Add all four options before syncing (as select options or status options). New rows should start as `Pending`. After a successful sync the tool sets `Synced`; failures set `Error` or `Skipped`. (`create-databases` creates these options automatically.)
 
 </details>
 
@@ -151,28 +140,28 @@ Replace `v0.1.0` with the release tag you installed via Rokit.
 
 | Variable | Required for | Purpose |
 | --- | --- | --- |
-| `NOTION_TOKEN` | `init`, `sync` | Notion integration internal secret |
+| `NOTION_TOKEN` | `create-databases`, `sync` | Notion integration internal secret |
 | `ROBLOX_API_KEY` | `sync` | Roblox Open Cloud API key |
 
 Do not commit `.env`. Keep database IDs, parent page ID, and universe settings in `ntn-roblox.toml` instead.
 
 #### Configuration (`ntn-roblox.toml`)
 
-**Required for `sync`.** Configuration is read from `ntn-roblox.toml` and `.env`. There are no CLI flags to override TOML values during `sync`. For `init`, `--parent-page-id` can supply `notion.parent_page_id` instead of setting it in the file. Unknown keys are rejected at startup.
+**Required for `sync`.** Configuration is read from `ntn-roblox.toml` and `.env`. There are no CLI flags to override TOML values during `sync`. For `create-databases`, `--parent-page-id` can supply `notion.parent_page_id` instead of setting it in the file. Unknown keys are rejected at startup.
 
-See [ntn-roblox.toml.example](./ntn-roblox.toml.example) for a commented template.
+See [ntn-roblox.toml.example](./ntn-roblox.toml.example) for a commented template (same content as `ntn-roblox init`).
 
 | Key | Required for | Default | Purpose |
 | --- | --- | --- | --- |
-| `notion.parent_page_id` | `init` | — | Parent page where `init` creates databases (32-char hex ID) |
-| `notion.dev_product_db_id` | `sync` | — | Notion database ID for Developer Products (`init` may leave empty) |
-| `notion.game_pass_db_id` | `sync` | — | Notion database ID for Game Passes (`init` may leave empty) |
-| `notion.badge_db_id` | `sync` | — | Notion database ID for Badges (`init` may leave empty) |
+| `notion.parent_page_id` | `create-databases` | — | Parent page where `create-databases` creates databases (32-char hex ID) |
+| `notion.dev_product_db_id` | `sync` | — | Notion database ID for Developer Products (`create-databases` may leave empty beforehand) |
+| `notion.game_pass_db_id` | `sync` | — | Notion database ID for Game Passes (`create-databases` may leave empty beforehand) |
+| `notion.badge_db_id` | `sync` | — | Notion database ID for Badges (`create-databases` may leave empty beforehand) |
 | `roblox.universe_id` | `sync` | — | Target universe ID |
 | `roblox.badge_payment_source` | No | `user` | Badge create payment source: `user` or `group` (free quota only) |
 | `logging.level` | No | `info` | Log level: `debug`, `info`, `warn`, or `error` |
 
-Example `ntn-roblox.toml` (after `init --write-toml`):
+Example `ntn-roblox.toml` (after `create-databases`):
 
 ```toml
 [notion]
@@ -254,11 +243,11 @@ Typical layout when using Rokit:
 my-game/
   .env                  # secrets (gitignored)
   ntn-roblox.toml       # parent page ID, DB IDs, universe_id (safe to commit)
-  rokit.toml            # ntn-roblox = "Zac134/NotionToRoblox@0.1.0"
+  rokit.toml            # ntn-roblox = "Zac134/NotionToRoblox@0.1.1"
   default.project.json
 ```
 
-Run `ntn-roblox init` or `ntn-roblox sync` from the project root (where `.env` and `ntn-roblox.toml` live). Add sync to CI or a pre-commit hook to keep Notion authoritative.
+Run `ntn-roblox init`, `ntn-roblox create-databases`, or `ntn-roblox sync` from the project root (where `.env` and `ntn-roblox.toml` live). Add sync to CI or a pre-commit hook to keep Notion authoritative.
 
 ---
 
@@ -268,20 +257,34 @@ Run `ntn-roblox init` or `ntn-roblox sync` from the project root (where `.env` a
 
 ### `init`
 
-Create the three Notion databases under a parent page. Requires `NOTION_TOKEN` only.
+Create `.env` and `ntn-roblox.toml` in the current directory. No Notion or Roblox credentials required.
 
 ```bash
-ntn-roblox init [--parent-page-id=<id>] [--write-toml] [--force]
+ntn-roblox init [--force]
+```
+
+| Option | Description |
+| --- | --- |
+| `--force` | Overwrite existing `.env` / `ntn-roblox.toml` |
+| `--help`, `-h` | Show help |
+
+Existing files are skipped unless `--force` is set. After filling in secrets and `parent_page_id`, run `create-databases`.
+
+### `create-databases`
+
+Create the three Notion databases under a parent page and write their IDs into `ntn-roblox.toml`. Requires `NOTION_TOKEN` only.
+
+```bash
+ntn-roblox create-databases [--parent-page-id=<id>] [--force]
 ```
 
 | Option | Description |
 | --- | --- |
 | `--parent-page-id=<id>` | Parent page ID (overrides `notion.parent_page_id` in TOML) |
-| `--write-toml` | Write created database IDs into `ntn-roblox.toml` |
 | `--force` | Create new databases even when database IDs are already configured |
 | `--help`, `-h` | Show help |
 
-Share the parent page with your integration before running `init`. Database IDs may be empty in `ntn-roblox.toml` beforehand; they are required before `sync`.
+Share the parent page with your integration before running `create-databases`. Database IDs may be empty in `ntn-roblox.toml` beforehand; they are required before `sync`.
 
 ### `sync`
 
@@ -319,16 +322,16 @@ If Roblox Create succeeds but Notion writeback fails completely, the CLI logs a 
 
 The CLI exits with code `1` when configuration is invalid, mapping fails, or any row ends in `Error` or `Skipped`. Common cases:
 
-- **Missing `ntn-roblox.toml`** — copy from [ntn-roblox.toml.example](./ntn-roblox.toml.example)
-- **Missing or invalid secrets** — set `NOTION_TOKEN` in `.env` for `init`; both `NOTION_TOKEN` and `ROBLOX_API_KEY` for `sync`
-- **Missing `notion.parent_page_id` on init** — set it in `ntn-roblox.toml` or pass `--parent-page-id`
+- **Missing `ntn-roblox.toml`** — run `ntn-roblox init`, or copy from [ntn-roblox.toml.example](./ntn-roblox.toml.example)
+- **Missing or invalid secrets** — set `NOTION_TOKEN` in `.env` for `create-databases`; both `NOTION_TOKEN` and `ROBLOX_API_KEY` for `sync`
+- **Missing `notion.parent_page_id` on create-databases** — set it in `ntn-roblox.toml` or pass `--parent-page-id`
 - **Parent page not shared with integration** — share the page via **Connections** / **Invite** (see [Notion setup](#notion-setup))
-- **Database IDs already configured on init** — remove or update stale IDs, or pass `--force`
+- **Database IDs already configured on create-databases** — remove or update stale IDs, or pass `--force`
 - **Unknown TOML keys** — the config schema is strict; remove extra keys
 - **Invalid `Sync Status` value** — must be one of `Pending`, `Synced`, `Error`, `Skipped`
 - **Missing `Price` on Create** — Developer Product and Game Pass rows require a price
 - **Badge free quota exhausted** — row is marked `Skipped`; retries after the daily GMT reset
-- **Notion permission errors** — for `init`, ensure **Insert content** and parent-page access; for `sync`, ensure **Read content** and **Update content**, and all three databases are shared (see [Notion setup](#notion-setup))
+- **Notion permission errors** — for `create-databases`, ensure **Insert content** and parent-page access; for `sync`, ensure **Read content** and **Update content**, and all three databases are shared (see [Notion setup](#notion-setup))
 - **Roblox API errors** — verify API key scopes (see [Roblox API Key scopes](#roblox-api-key-scopes))
 
 ---
@@ -345,8 +348,7 @@ The CLI exits with code `1` when configuration is invalid, mapping fails, or any
 
 ```bash
 npm install
-cp .env.example .env
-cp ntn-roblox.toml.example ntn-roblox.toml
+ntn-roblox init   # or: npm run init
 # Edit .env and ntn-roblox.toml
 ```
 
@@ -355,8 +357,9 @@ cp ntn-roblox.toml.example ntn-roblox.toml
 ```bash
 npm run build        # tsc
 npm run check        # type check
-npm run start -- init --help         # init command
-npm run start -- sync --help         # run compiled CLI
+npm run start -- init --help                 # init command
+npm run start -- create-databases --help     # create-databases command
+npm run start -- sync --help                 # run compiled CLI
 npm run sync                         # Full sync (no build required)
 npm run sync -- --dry-run            # No mutations (planned actions only)
 npm run sync -- --report-only        # Orphan report only
@@ -366,14 +369,15 @@ npm run sync -- --type=developer-product|game-pass|badge
 ### Project layout
 
 ```
-ntn-roblox.toml.example  # Non-secret config template (parent page + DB IDs)
+ntn-roblox.toml.example  # Non-secret config template (same as init output)
 src/
   cli.ts              # CLI entry
   env.ts              # .env loader (process.cwd())
   toml.ts             # ntn-roblox.toml loader (process.cwd())
-  tomlWrite.ts        # init --write-toml TOML updates
+  tomlWrite.ts        # create-databases TOML updates
   config.ts           # .env + TOML validation (zod)
-  init/               # Notion database bootstrap (init command)
+  init/               # Config scaffolding (init command)
+  createDatabases/    # Notion database bootstrap (create-databases command)
   sync/
     engine.ts         # Sync orchestration
     candidates.ts     # Row action selection
@@ -392,7 +396,7 @@ Release artifacts are standalone Bun-compiled binaries packaged as Rokit-compati
 **Prerequisites:** [Bun](https://bun.sh) on `PATH`, and `zip` or Python 3
 
 ```bash
-npm run compile -- 0.1.0 bun-darwin-arm64 ./release
+npm run compile -- 0.1.1 bun-darwin-arm64 ./release
 ```
 
 | `bun-target` | Zip suffix |
@@ -412,13 +416,13 @@ Output: `NotionToRoblox-<version>-<os>-<arch>.zip` containing a single `NotionTo
 2. Align version strings in `package.json`, README, and the commented consumer example in this repo's `rokit.toml` (the line stays commented here; consumer projects uncomment it in their own `rokit.toml`)
 3. Tag and push:
    ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
-   ```
+   git tag v0.1.1
+   git push origin v0.1.1
+```
 4. GitHub Actions builds all six targets and attaches zip assets to the Release
 5. Verify from a clean Roblox project:
    ```bash
-   rokit add Zac134/NotionToRoblox@0.1.0 ntn-roblox
+   rokit add Zac134/NotionToRoblox@0.1.1 ntn-roblox
    rokit install
    ntn-roblox sync --help
    ```

@@ -7,7 +7,7 @@
 # Usage: scripts/package-release.sh <version> <bun-target> <output-dir>
 #
 # Example (macOS host, local smoke):
-#   bash scripts/package-release.sh 0.1.0 bun-darwin-arm64 ./release
+#   bash scripts/package-release.sh 0.1.1 bun-darwin-arm64 ./release
 #
 # Requires: bun on PATH, zip (or Python 3 for fallback)
 set -euo pipefail
@@ -17,7 +17,7 @@ ROKIT_BIN_NAME="NotionToRoblox"
 
 usage() {
   echo "Usage: $0 <version> <bun-target> <output-dir>" >&2
-  echo "  version     Release version (v prefix optional, e.g. 0.1.0 or v0.1.0)" >&2
+  echo "  version     Release version (v prefix optional, e.g. 0.1.1 or v0.1.1)" >&2
   echo "  bun-target  One of: bun-linux-x64, bun-linux-arm64," >&2
   echo "              bun-darwin-x64, bun-darwin-arm64," >&2
   echo "              bun-windows-x64, bun-windows-arm64" >&2
