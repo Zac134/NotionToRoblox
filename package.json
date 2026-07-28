@@ -22,6 +22,8 @@
   "scripts": {
     "build": "tsc",
     "check": "tsc --noEmit",
+    "test": "node --experimental-test-module-mocks --import tsx --import ./test/setup.ts --test test/**/*.test.ts",
+    "init": "tsx src/cli.ts init",
     "sync": "tsx src/cli.ts",
     "start": "node dist/cli.js",
     "compile": "bash scripts/package-release.sh"

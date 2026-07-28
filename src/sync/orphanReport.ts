@@ -40,11 +40,12 @@ export function findOrphans(
     .sort((a, b) => a.robloxId - b.robloxId);
 }
 
+export function countOrphans(sections: OrphanReportSection[]): number {
+  return sections.reduce((sum, section) => sum + section.orphans.length, 0);
+}
+
 export function printOrphanReport(sections: OrphanReportSection[]): void {
-  const totalOrphans = sections.reduce(
-    (sum, section) => sum + section.orphans.length,
-    0,
-  );
+  const totalOrphans = countOrphans(sections);
 
   console.log("");
   console.log("Roblox items not referenced in Notion");
@@ -68,6 +69,10 @@ export function printOrphanReport(sections: OrphanReportSection[]): void {
     printSectionTable(section, childPrefix);
     console.log("");
   });
+
+  console.log(
+    "Report only / does not by itself set a non-zero exit.",
+  );
 }
 
 function printSectionTable(section: OrphanReportSection, prefix: string): void {

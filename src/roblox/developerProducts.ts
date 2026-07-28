@@ -1,4 +1,4 @@
-import { config } from "../config.js";
+import { getConfig } from "../config.js";
 import type {
   DeveloperProductInput,
   DeveloperProductUpdateInput,
@@ -34,7 +34,10 @@ interface DeveloperProductCreateResponse {
 }
 
 function pathWithUniverse(template: string): string {
-  return template.replace("{universeId}", String(config.ROBLOX_UNIVERSE_ID));
+  return template.replace(
+    "{universeId}",
+    String(getConfig().ROBLOX_UNIVERSE_ID),
+  );
 }
 
 function pathWithProduct(template: string, productId: number): string {

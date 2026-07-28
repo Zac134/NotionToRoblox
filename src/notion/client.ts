@@ -3,7 +3,7 @@ import type {
   PageObjectResponse,
   QueryDatabaseParameters,
 } from "@notionhq/client/build/src/api-endpoints.js";
-import { config } from "../config.js";
+import { getConfig } from "../config.js";
 import type { ResourceType } from "../types.js";
 import { notionRateLimiter } from "../util/rateLimit.js";
 
@@ -11,7 +11,7 @@ let cachedClient: Client | null = null;
 
 export function getNotionClient(): Client {
   if (!cachedClient) {
-    cachedClient = new Client({ auth: config.NOTION_TOKEN });
+    cachedClient = new Client({ auth: getConfig().NOTION_TOKEN });
   }
   return cachedClient;
 }
@@ -19,11 +19,11 @@ export function getNotionClient(): Client {
 export function databaseIdForType(type: ResourceType): string {
   switch (type) {
     case "developer-product":
-      return config.NOTION_DEVPRODUCT_DB_ID;
+      return getConfig().NOTION_DEVPRODUCT_DB_ID;
     case "game-pass":
-      return config.NOTION_GAMEPASS_DB_ID;
+      return getConfig().NOTION_GAMEPASS_DB_ID;
     case "badge":
-      return config.NOTION_BADGE_DB_ID;
+      return getConfig().NOTION_BADGE_DB_ID;
   }
 }
 

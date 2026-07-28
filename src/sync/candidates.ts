@@ -10,9 +10,24 @@ export interface SyncCandidate {
 
 const UPDATE_STATUSES: SyncStatus[] = ["Pending", "Error", "Skipped"];
 
-export function classifyRow(row: NotionRow): SyncCandidate {
+export interface ClassifyOptions {
+  force?: boolean;
+}
+
+export function classifyRow(
+  row: NotionRow,
+  options: ClassifyOptions = {},
+): SyncCandidate {
+  const force = options.force ?? false;
+
   if (row.syncStatus === "Synced") {
-    return { row, action: "skip", reason: "Sync Status is Synced" };
+    if (!force) {
+      return { row, action: "skip", reason: "Sync Status is Synced" };
+    }
+    if (row.robloxId === null) {
+      return { row, action: "create" };
+    }
+    return { row, action: "update" };
   }
 
   if (row.robloxId === null) {
@@ -26,8 +41,11 @@ export function classifyRow(row: NotionRow): SyncCandidate {
   return { row, action: "skip", reason: `Unhandled Sync Status: ${row.syncStatus}` };
 }
 
-export function classifyRows(rows: NotionRow[]): SyncCandidate[] {
-  return rows.map(classifyRow);
+export function classifyRows(
+  rows: NotionRow[],
+  options: ClassifyOptions = {},
+): SyncCandidate[] {
+  return rows.map((row) => classifyRow(row, options));
 }
 
 export function filterActionable(candidates: SyncCandidate[]): SyncCandidate[] {
