@@ -1,5 +1,6 @@
 import { getConfig } from "../config.js";
 import type { FileUpload } from "../types.js";
+import { logger } from "../util/logger.js";
 import {
   robloxBadgeLimiter,
   robloxDeveloperProductReadLimiter,
@@ -14,6 +15,7 @@ export const ROBLOX_API_BASE = "https://apis.roblox.com";
 export const BADGES_PUBLIC_BASE = "https://badges.roblox.com";
 
 const MAX_ROBLOX_RETRIES = 3;
+const DEBUG_BODY_MAX = 500;
 
 export class RobloxHttpError extends Error {
   readonly status: number;
@@ -21,7 +23,7 @@ export class RobloxHttpError extends Error {
   readonly url: string;
 
   constructor(status: number, body: string, url: string) {
-    super(`Roblox API error ${status} for ${url}: ${body}`);
+    super(`Roblox API error ${status} for ${url}`);
     this.name = "RobloxHttpError";
     this.status = status;
     this.body = body;
@@ -107,6 +109,7 @@ async function executeWithRetry<T>(
       }
 
       if (attempt >= MAX_ROBLOX_RETRIES) {
+        logRobloxErrorResponse(error.status, error.url, error.body);
         throw new RobloxHttpError(error.status, error.body, error.url);
       }
 
@@ -217,6 +220,25 @@ export async function robloxMultipart<T>(
   return executeWithRetry(execute, limiter);
 }
 
+function truncateForDebug(text: string): string {
+  if (text.length <= DEBUG_BODY_MAX) {
+    return text;
+  }
+  return `${text.slice(0, DEBUG_BODY_MAX)}...`;
+}
+
+function logRobloxErrorResponse(
+  status: number,
+  url: string,
+  body: string,
+): void {
+  logger.debug("Roblox API error response", {
+    status,
+    url,
+    body: truncateForDebug(body),
+  });
+}
+
 async function parseResponse<T>(
   response: Response,
   url: string,
@@ -233,6 +255,7 @@ async function parseResponse<T>(
         response.headers.get("Retry-After"),
       );
     }
+    logRobloxErrorResponse(response.status, url, text);
     throw new RobloxHttpError(response.status, text, url);
   }
 

@@ -1,4 +1,9 @@
 import { logger } from "./logger.js";
+import {
+  MAX_DOWNLOAD_BYTES,
+  MAX_REDIRECTS,
+  validateDownloadUrl,
+} from "./urlSafety.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -16,14 +21,21 @@ export async function downloadFile(
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(url, { signal: controller.signal });
+    const { response, finalUrl } = await fetchWithRedirects(
+      url,
+      controller.signal,
+    );
     if (!response.ok) {
-      throw new Error(`Download failed (${response.status}) for ${sanitizeUrl(url)}`);
+      throw new Error(
+        `Download failed (${response.status}) for ${sanitizeUrl(finalUrl)}`,
+      );
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const filename = filenameFromUrl(url);
+    const buffer = await readResponseBodyLimited(
+      response,
+      MAX_DOWNLOAD_BYTES,
+    );
+    const filename = filenameFromUrl(finalUrl);
     const mimeType =
       response.headers.get("content-type")?.split(";")[0]?.trim() ||
       guessMimeType(filename);
@@ -38,6 +50,84 @@ export async function downloadFile(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function fetchWithRedirects(
+  initialUrl: string,
+  signal: AbortSignal,
+): Promise<{ response: Response; finalUrl: string }> {
+  validateDownloadUrl(initialUrl);
+
+  let currentUrl = initialUrl;
+  let redirectsFollowed = 0;
+
+  while (true) {
+    const response = await fetch(currentUrl, {
+      signal,
+      redirect: "manual",
+    });
+
+    if (response.status >= 300 && response.status < 400) {
+      if (redirectsFollowed >= MAX_REDIRECTS) {
+        throw new Error(`Too many redirects for ${sanitizeUrl(initialUrl)}`);
+      }
+
+      const location = response.headers.get("location");
+      if (!location) {
+        throw new Error(
+          `Redirect response missing Location for ${sanitizeUrl(currentUrl)}`,
+        );
+      }
+
+      currentUrl = new URL(location, currentUrl).href;
+      validateDownloadUrl(currentUrl);
+      redirectsFollowed += 1;
+      continue;
+    }
+
+    return { response, finalUrl: currentUrl };
+  }
+}
+
+async function readResponseBodyLimited(
+  response: Response,
+  maxBytes: number,
+): Promise<Buffer> {
+  const contentLength = response.headers.get("content-length");
+  if (contentLength !== null) {
+    const length = Number(contentLength);
+    if (!Number.isNaN(length) && length > maxBytes) {
+      throw new Error(`Download body exceeds ${maxBytes} bytes`);
+    }
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return Buffer.alloc(0);
+  }
+
+  const chunks: Buffer[] = [];
+  let total = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new Error(`Download body exceeds ${maxBytes} bytes`);
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return Buffer.concat(chunks);
 }
 
 function filenameFromUrl(url: string): string {

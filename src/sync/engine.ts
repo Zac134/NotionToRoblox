@@ -12,6 +12,7 @@ import {
   writebackSuccess,
 } from "../notion/writeback.js";
 import { ensureSyncStatusSchemas } from "../notion/schema.js";
+import { RobloxHttpError } from "../roblox/http.js";
 import {
   BadgeQuotaExhaustedError,
   createBadge,
@@ -40,6 +41,7 @@ import type {
 } from "../types.js";
 import { downloadFile } from "../util/download.js";
 import { logger } from "../util/logger.js";
+import { sanitizeErrorMessage } from "../util/sanitizeError.js";
 import {
   classifyRows,
   filterActionable,
@@ -507,10 +509,13 @@ async function handleMappingError(
 }
 
 function formatError(error: unknown): string {
-  if (error instanceof Error) {
+  if (error instanceof RobloxHttpError) {
     return error.message;
   }
-  return String(error);
+  if (error instanceof Error) {
+    return sanitizeErrorMessage(error.message);
+  }
+  return sanitizeErrorMessage(String(error));
 }
 
 function logSummary(result: SyncResult, options: SyncOptions): void {

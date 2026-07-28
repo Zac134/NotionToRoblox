@@ -12,6 +12,8 @@
 
 NotionToRoblox is a CLI that treats Notion databases as the source of truth and synchronizes **Developer Products**, **Game Passes**, and **Badges** to a Roblox universe through the Open Cloud API. Create and update rows in Notion; the tool creates or updates matching Roblox assets and writes results back to Notion.
 
+**Distribution:** Distributed via [Rokit](https://github.com/rojo-rbx/rokit) / [GitHub Releases](https://github.com/Zac134/NotionToRoblox/releases). Not published to npm (`private: true` in `package.json`).
+
 ## Requirements
 
 - [Rokit](https://github.com/rojo-rbx/rokit)
@@ -407,7 +409,7 @@ Output: `NotionToRoblox-<version>-<os>-<arch>.zip` containing a single `NotionTo
 #### Release checklist
 
 1. Confirm checks pass: `npm run check`
-2. Align version strings in `package.json`, README, and `rokit.toml` comments
+2. Align version strings in `package.json`, README, and the commented consumer example in this repo's `rokit.toml` (the line stays commented here; consumer projects uncomment it in their own `rokit.toml`)
 3. Tag and push:
    ```bash
    git tag v0.1.0
@@ -421,7 +423,26 @@ Output: `NotionToRoblox-<version>-<os>-<arch>.zip` containing a single `NotionTo
    ntn-roblox sync --help
    ```
 
+#### Pre-publication checklist (maintainers)
+
+Before making the repository public or cutting the first GitHub Release:
+
+- [ ] Set the GitHub repository visibility to **Public**
+- [ ] Confirm no secrets in git history or tracked files (`.env`, API keys, real tokens in examples)
+- [ ] Enable **Dependabot** alerts and version updates (see [`.github/dependabot.yml`](./.github/dependabot.yml))
+- [ ] Enable **Private vulnerability reporting** (Security → Advisories) — recommended
+
+See [SECURITY.md](./SECURITY.md) for vulnerability reporting.
+
 </details>
+
+---
+
+## Security
+
+Report vulnerabilities privately via [GitHub Security Advisories](https://github.com/Zac134/NotionToRoblox/security/advisories/new) or a high-level GitHub Issue. **Do not paste secrets** (`NOTION_TOKEN`, `ROBLOX_API_KEY`, `.env` contents) in public reports.
+
+Details: [SECURITY.md](./SECURITY.md)
 
 ---
 
