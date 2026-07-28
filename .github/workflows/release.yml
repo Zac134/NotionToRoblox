@@ -60,7 +60,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           bash scripts/package-release.sh "$VERSION" "${{ matrix.bun_target }}" dist/release
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: NotionToRoblox-${{ matrix.artifact_suffix }}
           path: dist/release/NotionToRoblox-*-${{ matrix.artifact_suffix }}.zip
