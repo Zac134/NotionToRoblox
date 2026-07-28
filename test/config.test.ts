@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
   isNotionDatabaseIdConfigured,
-  loadInitConfig,
+  loadCreateDatabasesConfig,
   loadSyncConfig,
 } from "../src/config.js";
 
@@ -30,9 +30,9 @@ describe("isNotionDatabaseIdConfigured", () => {
   });
 });
 
-describe("loadInitConfig", () => {
+describe("loadCreateDatabasesConfig", () => {
   it("loads with NOTION_TOKEN only and requires parent_page_id", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ntn-init-config-"));
+    const dir = mkdtempSync(join(tmpdir(), "ntn-create-db-config-"));
     const tomlPath = writeToml(
       dir,
       `[notion]
@@ -43,19 +43,19 @@ level = "info"
 `,
     );
 
-    const config = loadInitConfig({
-      env: { NOTION_TOKEN: "init-token" },
+    const config = loadCreateDatabasesConfig({
+      env: { NOTION_TOKEN: "create-db-token" },
       tomlPath,
     });
 
-    assert.equal(config.NOTION_TOKEN, "init-token");
+    assert.equal(config.NOTION_TOKEN, "create-db-token");
     assert.equal(config.NOTION_PARENT_PAGE_ID, "parent-from-toml");
     assert.equal(config.ROBLOX_API_KEY, "");
     assert.equal(config.NOTION_DEVPRODUCT_DB_ID, "");
   });
 
   it("accepts parent_page_id from CLI option when TOML omits it", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ntn-init-config-"));
+    const dir = mkdtempSync(join(tmpdir(), "ntn-create-db-config-"));
     const tomlPath = writeToml(
       dir,
       `[notion]
@@ -65,8 +65,8 @@ level = "info"
 `,
     );
 
-    const config = loadInitConfig({
-      env: { NOTION_TOKEN: "init-token" },
+    const config = loadCreateDatabasesConfig({
+      env: { NOTION_TOKEN: "create-db-token" },
       tomlPath,
       parentPageId: "parent-from-cli",
     });
@@ -75,7 +75,7 @@ level = "info"
   });
 
   it("throws when NOTION_TOKEN is missing", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ntn-init-config-"));
+    const dir = mkdtempSync(join(tmpdir(), "ntn-create-db-config-"));
     const tomlPath = writeToml(
       dir,
       `[notion]
@@ -84,13 +84,13 @@ parent_page_id = "parent"
     );
 
     assert.throws(
-      () => loadInitConfig({ env: {}, tomlPath }),
+      () => loadCreateDatabasesConfig({ env: {}, tomlPath }),
       /NOTION_TOKEN.*Required/,
     );
   });
 
   it("throws when parent_page_id is missing", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ntn-init-config-"));
+    const dir = mkdtempSync(join(tmpdir(), "ntn-create-db-config-"));
     const tomlPath = writeToml(
       dir,
       `[notion]
@@ -101,13 +101,17 @@ level = "info"
     );
 
     assert.throws(
-      () => loadInitConfig({ env: { NOTION_TOKEN: "init-token" }, tomlPath }),
-      /parent page ID is required for init/,
+      () =>
+        loadCreateDatabasesConfig({
+          env: { NOTION_TOKEN: "create-db-token" },
+          tomlPath,
+        }),
+      /parent page ID is required for create-databases/,
     );
   });
 
   it("does not require ROBLOX_API_KEY", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ntn-init-config-"));
+    const dir = mkdtempSync(join(tmpdir(), "ntn-create-db-config-"));
     const tomlPath = writeToml(
       dir,
       `[notion]
@@ -115,8 +119,8 @@ parent_page_id = "parent"
 `,
     );
 
-    const config = loadInitConfig({
-      env: { NOTION_TOKEN: "init-token" },
+    const config = loadCreateDatabasesConfig({
+      env: { NOTION_TOKEN: "create-db-token" },
       tomlPath,
     });
 

@@ -7,7 +7,7 @@ const syncSecretsSchema = z.object({
   ROBLOX_API_KEY: z.string().min(1, "ROBLOX_API_KEY is required"),
 });
 
-const initSecretsSchema = z.object({
+const createDatabasesSecretsSchema = z.object({
   NOTION_TOKEN: z.string().min(1, "NOTION_TOKEN is required"),
 });
 
@@ -36,7 +36,7 @@ const syncTomlSchema = z
   })
   .strict();
 
-const initTomlSchema = z
+const createDatabasesTomlSchema = z
   .object({
     notion: z
       .object({
@@ -153,7 +153,7 @@ export function loadSyncConfig(options?: {
   return config;
 }
 
-export function loadInitConfig(options?: {
+export function loadCreateDatabasesConfig(options?: {
   env?: NodeJS.ProcessEnv;
   tomlPath?: string;
   parentPageId?: string;
@@ -161,7 +161,7 @@ export function loadInitConfig(options?: {
   const env = options?.env ?? process.env;
   const errors: string[] = [];
 
-  const secretsResult = initSecretsSchema.safeParse({
+  const secretsResult = createDatabasesSecretsSchema.safeParse({
     NOTION_TOKEN: env.NOTION_TOKEN,
   });
   if (!secretsResult.success) {
@@ -169,7 +169,7 @@ export function loadInitConfig(options?: {
   }
 
   const tomlData = loadTomlFile(options?.tomlPath);
-  const tomlResult = initTomlSchema.safeParse(tomlData);
+  const tomlResult = createDatabasesTomlSchema.safeParse(tomlData);
   if (!tomlResult.success) {
     errors.push(formatZodError(tomlResult.error));
   }
@@ -186,7 +186,7 @@ export function loadInitConfig(options?: {
     trimOptional(toml.notion.parent_page_id);
   if (!parentPageId) {
     throw new Error(
-      "Invalid configuration:\nnotion.parent_page_id: parent page ID is required for init (set in ntn-roblox.toml or pass --parent-page-id)",
+      "Invalid configuration:\nnotion.parent_page_id: parent page ID is required for create-databases (set in ntn-roblox.toml or pass --parent-page-id)",
     );
   }
 
