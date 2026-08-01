@@ -27,7 +27,7 @@
     "create-db": "tsx src/cli.ts create-databases",
     "create-databases": "tsx src/cli.ts create-databases",
     "sync": "tsx src/cli.ts sync",
-    "update": "tsx src/cli.ts sync",
+    "update": "tsx src/cli.ts update",
     "start": "node dist/cli.js",
     "compile": "bash scripts/package-release.sh"
   },

@@ -1,17 +1,27 @@
+import {
+  isMultiUniverseMode,
+  resolveSyncTargets,
+  setActiveUniverse,
+} from "../config.js";
 import { databaseIdForType, queryAllPagesForType } from "../notion/client.js";
 import {
   isMappingError,
+  mapAssetPage,
   mapBadgePage,
   mapDeveloperProductPage,
   mapGamePassPage,
 } from "../notion/mapRow.js";
 import {
+  aggregateTargetResults,
+  writebackAggregatedTargetResults,
   writebackError,
   writebackRobloxId,
   writebackSkipped,
   writebackSuccess,
+  type TargetResult,
 } from "../notion/writeback.js";
 import { ensureSyncStatusSchemas } from "../notion/schema.js";
+import { createAsset, updateAssetMetadata } from "../roblox/assets.js";
 import { RobloxHttpError } from "../roblox/http.js";
 import {
   BadgeQuotaExhaustedError,
@@ -34,16 +44,20 @@ import {
   updateGamePass,
 } from "../roblox/gamePasses.js";
 import type {
+  AssetRow,
   FileUpload,
   NotionRow,
   ResourceType,
   RowMappingError,
 } from "../types.js";
-import { downloadFile } from "../util/download.js";
+import {
+  downloadFile,
+  MAX_ASSET_DOWNLOAD_BYTES,
+} from "../util/download.js";
 import { logger } from "../util/logger.js";
 import { sanitizeErrorMessage } from "../util/sanitizeError.js";
 import {
-  classifyRows,
+  classifyRow,
   filterActionable,
   type SyncCandidate,
 } from "./candidates.js";
@@ -55,12 +69,14 @@ import {
   type OrphanItem,
   type OrphanReportSection,
 } from "./orphanReport.js";
+import { getRobloxIdForTarget } from "./robloxIds.js";
 
 export interface SyncOptions {
+  mode: "sync" | "update";
   dryRun: boolean;
   reportOnly: boolean;
-  force: boolean;
   typeFilter?: ResourceType;
+  targetFilter?: string;
 }
 
 export interface SyncResult {
@@ -72,7 +88,18 @@ export interface SyncResult {
   orphans: number;
 }
 
-const ALL_TYPES: ResourceType[] = ["developer-product", "game-pass", "badge"];
+const ALL_TYPES: ResourceType[] = [
+  "developer-product",
+  "game-pass",
+  "badge",
+  "asset",
+];
+
+const MONETIZATION_TYPES: ResourceType[] = [
+  "developer-product",
+  "game-pass",
+  "badge",
+];
 
 const TYPE_LABELS: Record<ResourceType, string> = {
   "developer-product": "Developer Product",
@@ -85,12 +112,14 @@ interface TypeSyncContext {
   type: ResourceType;
   rows: NotionRow[];
   mappingErrors: RowMappingError[];
-  candidates: SyncCandidate[];
 }
 
 export async function runSync(options: SyncOptions): Promise<SyncResult> {
   const types = resolveTypes(options.typeFilter);
   await ensureSyncStatusSchemas(types);
+
+  const targets = resolveSyncTargets(options.targetFilter);
+  const skipWriteback = options.dryRun || options.reportOnly;
 
   const result: SyncResult = {
     created: 0,
@@ -102,8 +131,8 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
   };
 
   const orphanSections: OrphanReportSection[] = [];
-  const typeContexts: TypeSyncContext[] = [];
-  const skipWriteback = options.dryRun || options.reportOnly;
+  const monetizationContexts: TypeSyncContext[] = [];
+  let assetContext: TypeSyncContext | undefined;
 
   for (const type of types) {
     logger.info(`Loading ${TYPE_LABELS[type]}...`);
@@ -116,19 +145,23 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
       result.errors += 1;
     }
 
-    const robloxItems = await listRobloxItemsForOrphans(type);
-    const notionIds = collectNotionRobloxIds(rows);
-    orphanSections.push({
-      type,
-      orphans: findOrphans(robloxItems, notionIds),
-    });
+    if (type === "asset") {
+      assetContext = { type, rows, mappingErrors };
+      continue;
+    }
 
-    typeContexts.push({
-      type,
-      rows,
-      mappingErrors,
-      candidates: filterActionable(classifyRows(rows, { force: options.force })),
-    });
+    for (const target of targets) {
+      setActiveUniverse(target.key);
+
+      const robloxItems = await listRobloxItemsForOrphans(type);
+      const notionIds = collectNotionRobloxIds(rows, target.key);
+      orphanSections.push({
+        type,
+        orphans: findOrphans(robloxItems, notionIds),
+      });
+    }
+
+    monetizationContexts.push({ type, rows, mappingErrors });
   }
 
   result.orphans = countOrphans(orphanSections);
@@ -141,42 +174,113 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
 
   let badgeQuota: number | undefined;
 
-  for (const context of typeContexts) {
-    const { type, candidates } = context;
+  for (const context of monetizationContexts) {
+    const { type, rows } = context;
     logger.info(`Syncing ${TYPE_LABELS[type]}...`);
 
-    if (candidates.length === 0) {
-      logger.info(`No actionable rows for ${TYPE_LABELS[type]}`);
-      continue;
-    }
+    if (isMultiUniverseMode()) {
+      const rowResults = new Map<string, TargetResult[]>();
 
-    if (type === "badge" && badgeQuota === undefined) {
-      badgeQuota = await getFreeBadgeQuota();
-      logger.info(`Badge free quota remaining: ${badgeQuota}`);
-    }
+      for (const target of targets) {
+        setActiveUniverse(target.key);
 
-    for (const candidate of candidates) {
-      const rowResult = await processCandidate(candidate, {
-        dryRun: options.dryRun,
-        badgeQuota,
-      });
+        const candidates = buildCandidates(rows, options.mode, target.key);
+        if (candidates.length === 0) {
+          continue;
+        }
 
-      if (rowResult.outcome === "created") {
-        result.created += 1;
-      } else if (rowResult.outcome === "updated") {
-        result.updated += 1;
-      } else if (rowResult.outcome === "skipped") {
-        result.skipped += 1;
-      } else {
-        result.errors += 1;
+        if (type === "badge" && badgeQuota === undefined) {
+          badgeQuota = await getFreeBadgeQuota();
+          logger.info(`Badge free quota remaining: ${badgeQuota}`);
+        }
+
+        for (const candidate of candidates) {
+          const rowResult = await processCandidate(candidate, {
+            dryRun: options.dryRun,
+            badgeQuota,
+            targetKey: target.key,
+            deferWriteback: true,
+          });
+
+          applyRowResult(result, rowResult);
+
+          if (
+            type === "badge" &&
+            badgeQuota !== undefined &&
+            rowResult.consumedBadgeQuota
+          ) {
+            badgeQuota -= 1;
+          }
+
+          const targetOutcome = toTargetResult(
+            target.key,
+            rowResult,
+            candidate.reason,
+          );
+          const existing = rowResults.get(candidate.row.pageId) ?? [];
+          existing.push(targetOutcome);
+          rowResults.set(candidate.row.pageId, existing);
+        }
       }
 
-      if (
-        type === "badge" &&
-        badgeQuota !== undefined &&
-        rowResult.consumedBadgeQuota
-      ) {
-        badgeQuota -= 1;
+      if (!options.dryRun) {
+        for (const [pageId, targetResults] of rowResults) {
+          const aggregated = aggregateTargetResults(targetResults);
+          await writebackAggregatedTargetResults(
+            pageId,
+            databaseIdForType(type),
+            aggregated,
+          );
+        }
+      }
+    } else {
+      const target = targets[0]!;
+      setActiveUniverse(target.key);
+
+      const candidates = buildCandidates(rows, options.mode, target.key);
+      if (candidates.length === 0) {
+        logger.info(`No actionable rows for ${TYPE_LABELS[type]}`);
+        continue;
+      }
+
+      if (type === "badge" && badgeQuota === undefined) {
+        badgeQuota = await getFreeBadgeQuota();
+        logger.info(`Badge free quota remaining: ${badgeQuota}`);
+      }
+
+      for (const candidate of candidates) {
+        const rowResult = await processCandidate(candidate, {
+          dryRun: options.dryRun,
+          badgeQuota,
+          targetKey: target.key,
+        });
+
+        applyRowResult(result, rowResult);
+
+        if (
+          type === "badge" &&
+          badgeQuota !== undefined &&
+          rowResult.consumedBadgeQuota
+        ) {
+          badgeQuota -= 1;
+        }
+      }
+    }
+  }
+
+  if (assetContext && types.includes("asset")) {
+    logger.info(`Syncing ${TYPE_LABELS.asset}...`);
+    const candidates = buildCandidates(assetContext.rows, options.mode, null);
+
+    if (candidates.length === 0) {
+      logger.info(`No actionable rows for ${TYPE_LABELS.asset}`);
+    } else {
+      for (const candidate of candidates) {
+        const rowResult = await processCandidate(candidate, {
+          dryRun: options.dryRun,
+          targetKey: null,
+        });
+        applyRowResult(result, rowResult);
       }
     }
   }
@@ -185,8 +289,72 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
   return result;
 }
 
+function buildCandidates(
+  rows: NotionRow[],
+  mode: SyncOptions["mode"],
+  targetKey: string | null,
+): SyncCandidate[] {
+  return filterActionable(
+    rows.map((row) =>
+      classifyRow(row, {
+        mode,
+        robloxIdForTarget: getRobloxIdForTarget(row, targetKey),
+      }),
+    ),
+  );
+}
+
+function toTargetResult(
+  targetKey: string | null,
+  rowResult: ProcessCandidateResult,
+  skipReason?: string,
+): TargetResult {
+  if (rowResult.outcome === "created") {
+    return {
+      targetKey,
+      outcome: "created",
+      robloxId: rowResult.robloxId,
+    };
+  }
+  if (rowResult.outcome === "updated") {
+    return {
+      targetKey,
+      outcome: "updated",
+      robloxId: rowResult.robloxId,
+    };
+  }
+  if (rowResult.outcome === "skipped") {
+    return {
+      targetKey,
+      outcome: "skipped",
+      message: rowResult.message ?? skipReason,
+    };
+  }
+  return {
+    targetKey,
+    outcome: "error",
+    message: rowResult.message,
+    robloxId: rowResult.robloxId,
+  };
+}
+
+function applyRowResult(result: SyncResult, rowResult: ProcessCandidateResult): void {
+  if (rowResult.outcome === "created") {
+    result.created += 1;
+  } else if (rowResult.outcome === "updated") {
+    result.updated += 1;
+  } else if (rowResult.outcome === "skipped") {
+    result.skipped += 1;
+  } else {
+    result.errors += 1;
+  }
+}
+
 function resolveTypes(typeFilter?: ResourceType): ResourceType[] {
-  return typeFilter ? [typeFilter] : ALL_TYPES;
+  if (typeFilter) {
+    return [typeFilter];
+  }
+  return ALL_TYPES;
 }
 
 async function loadNotionRows(type: ResourceType): Promise<{
@@ -221,10 +389,7 @@ function mapPage(
     case "badge":
       return mapBadgePage(page);
     case "asset":
-      return {
-        pageId: page.id,
-        message: "Asset row mapping is not implemented yet",
-      };
+      return mapAssetPage(page);
   }
 }
 
@@ -262,11 +427,15 @@ type RowOutcome = "created" | "updated" | "skipped" | "error";
 export interface ProcessCandidateResult {
   outcome: RowOutcome;
   consumedBadgeQuota?: boolean;
+  robloxId?: number;
+  message?: string;
 }
 
 interface ProcessContext {
   dryRun: boolean;
   badgeQuota?: number;
+  targetKey: string | null;
+  deferWriteback?: boolean;
 }
 
 export async function processCandidate(
@@ -287,18 +456,24 @@ export async function processCandidate(
       const reason = error.message;
       warnQuotaExhausted(row.name);
       logger.warn(`${label}: ${reason}`);
-      if (!context.dryRun) {
+      if (!context.dryRun && !context.deferWriteback) {
         await writebackSkipped(row.pageId, databaseId, reason);
       }
-      return { outcome: "skipped" };
+      return { outcome: "skipped", message: reason };
     }
 
     const message = formatError(error);
     logger.error(`${label}: ${message}`);
-    if (!context.dryRun) {
-      await writebackError(row.pageId, databaseId, message);
+    if (!context.dryRun && !context.deferWriteback) {
+      await writebackError(
+        row.pageId,
+        databaseId,
+        message,
+        undefined,
+        context.targetKey,
+      );
     }
-    return { outcome: "error" };
+    return { outcome: "error", message };
   }
 }
 
@@ -308,16 +483,26 @@ async function processCreate(
   context: ProcessContext,
 ): Promise<ProcessCandidateResult> {
   const databaseId = databaseIdForType(row.type);
+
+  if (row.type === "asset" && !row.fileUrl) {
+    const reason = "File is required for asset create";
+    logger.error(`${label}: ${reason}`);
+    if (!context.dryRun && !context.deferWriteback) {
+      await writebackError(row.pageId, databaseId, reason);
+    }
+    return { outcome: "error", message: reason };
+  }
+
   if (row.type === "badge") {
     const quota = context.badgeQuota ?? 0;
     if (quota <= 0) {
       const reason = "Badge free quota exhausted";
       warnQuotaExhausted(row.name);
       logger.warn(`${label}: ${reason}`);
-      if (!context.dryRun) {
+      if (!context.dryRun && !context.deferWriteback) {
         await writebackSkipped(row.pageId, databaseId, reason);
       }
-      return { outcome: "skipped" };
+      return { outcome: "skipped", message: reason };
     }
   }
 
@@ -328,27 +513,48 @@ async function processCreate(
   ) {
     const reason = "Price is required for create";
     logger.error(`${label}: ${reason}`);
-    if (!context.dryRun) {
-      await writebackError(row.pageId, databaseId, reason);
+    if (!context.dryRun && !context.deferWriteback) {
+      await writebackError(
+        row.pageId,
+        databaseId,
+        reason,
+        undefined,
+        context.targetKey,
+      );
     }
-    return { outcome: "error" };
+    return { outcome: "error", message: reason };
   }
 
-  const iconHint = row.iconUrl ? "yes" : "no";
+  const iconHint = row.type === "asset" ? "n/a" : row.iconUrl ? "yes" : "no";
 
   if (context.dryRun) {
     logger.info(`[DRY-RUN] CREATE ${label} (icon=${iconHint})`);
     return { outcome: "created" };
   }
 
-  const icon = await resolveIcon(row.iconUrl);
+  const icon =
+    row.type === "asset" ? undefined : await resolveIcon(row.iconUrl);
 
   const robloxId = await createRobloxItem(row, icon, context.badgeQuota ?? 0);
   const consumedBadgeQuota = row.type === "badge";
 
+  if (context.deferWriteback) {
+    logger.info(`Created ${label} → Roblox ID ${robloxId}`);
+    return {
+      outcome: "created",
+      robloxId,
+      ...(consumedBadgeQuota ? { consumedBadgeQuota: true } : {}),
+    };
+  }
+
   let idWritebackOk = true;
   try {
-    await writebackRobloxId(row.pageId, databaseId, robloxId);
+    await writebackRobloxId(
+      row.pageId,
+      databaseId,
+      robloxId,
+      context.targetKey,
+    );
   } catch (error) {
     idWritebackOk = false;
     logger.error(
@@ -359,10 +565,16 @@ async function processCreate(
   let robloxIdPersisted = idWritebackOk;
 
   try {
-    await writebackSuccess(row.pageId, databaseId, robloxId);
+    await writebackSuccess(
+      row.pageId,
+      databaseId,
+      robloxId,
+      context.targetKey,
+    );
     logger.info(`Created ${label} → Roblox ID ${robloxId}`);
     return {
       outcome: "created",
+      robloxId,
       ...(consumedBadgeQuota ? { consumedBadgeQuota: true } : {}),
     };
   } catch (error) {
@@ -370,7 +582,13 @@ async function processCreate(
     logger.error(`${label}: Sync success writeback failed: ${message}`);
 
     try {
-      await writebackError(row.pageId, databaseId, message, robloxId);
+      await writebackError(
+        row.pageId,
+        databaseId,
+        message,
+        robloxId,
+        context.targetKey,
+      );
       robloxIdPersisted = true;
     } catch (writebackErr) {
       logger.error(
@@ -388,6 +606,8 @@ async function processCreate(
 
     return {
       outcome: "error",
+      message,
+      robloxId,
       ...(consumedBadgeQuota ? { consumedBadgeQuota: true } : {}),
     };
   }
@@ -399,30 +619,50 @@ async function processUpdate(
   context: ProcessContext,
 ): Promise<ProcessCandidateResult> {
   const databaseId = databaseIdForType(row.type);
-  if (row.robloxId === null) {
+  const robloxId = getRobloxIdForTarget(row, context.targetKey);
+
+  if (robloxId === null) {
     const reason = "Roblox ID is required for update";
     logger.error(`${label}: ${reason}`);
-    if (!context.dryRun) {
-      await writebackError(row.pageId, databaseId, reason);
+    if (!context.dryRun && !context.deferWriteback) {
+      await writebackError(
+        row.pageId,
+        databaseId,
+        reason,
+        undefined,
+        context.targetKey,
+      );
     }
-    return { outcome: "error" };
+    return { outcome: "error", message: reason };
   }
 
-  const iconHint = row.iconUrl ? "yes" : "no";
+  const iconHint = row.type === "asset" ? "n/a" : row.iconUrl ? "yes" : "no";
 
   if (context.dryRun) {
     logger.info(
-      `[DRY-RUN] UPDATE ${label} (Roblox ID ${row.robloxId}, icon=${iconHint})`,
+      `[DRY-RUN] UPDATE ${label} (Roblox ID ${robloxId}, icon=${iconHint})`,
     );
-    return { outcome: "updated" };
+    return { outcome: "updated", robloxId };
   }
 
-  const icon = await resolveIcon(row.iconUrl);
+  const icon =
+    row.type === "asset" ? undefined : await resolveIcon(row.iconUrl);
 
-  await updateRobloxItem(row, icon);
-  await writebackSuccess(row.pageId, databaseId, row.robloxId);
-  logger.info(`Updated ${label} (Roblox ID ${row.robloxId})`);
-  return { outcome: "updated" };
+  await updateRobloxItem(row, icon, robloxId);
+
+  if (context.deferWriteback) {
+    logger.info(`Updated ${label} (Roblox ID ${robloxId})`);
+    return { outcome: "updated", robloxId };
+  }
+
+  await writebackSuccess(
+    row.pageId,
+    databaseId,
+    robloxId,
+    context.targetKey,
+  );
+  logger.info(`Updated ${label} (Roblox ID ${robloxId})`);
+  return { outcome: "updated", robloxId };
 }
 
 async function createRobloxItem(
@@ -458,16 +698,29 @@ async function createRobloxItem(
         badgeQuota,
       );
     case "asset":
-      throw new Error("Asset sync is not implemented yet");
+      return createAssetFromRow(row);
   }
+}
+
+async function createAssetFromRow(row: AssetRow): Promise<number> {
+  const file = await downloadFile(
+    row.fileUrl as string,
+    undefined,
+    MAX_ASSET_DOWNLOAD_BYTES,
+  );
+  return createAsset({
+    assetType: row.assetType,
+    displayName: row.name,
+    description: row.description,
+    file,
+  });
 }
 
 async function updateRobloxItem(
   row: NotionRow,
   icon: FileUpload | undefined,
+  robloxId: number,
 ): Promise<void> {
-  const robloxId = row.robloxId as number;
-
   switch (row.type) {
     case "developer-product":
       await updateDeveloperProduct(robloxId, {
@@ -496,7 +749,11 @@ async function updateRobloxItem(
       });
       return;
     case "asset":
-      throw new Error("Asset sync is not implemented yet");
+      await updateAssetMetadata(robloxId, {
+        displayName: row.name,
+        description: row.description,
+      });
+      return;
   }
 }
 
@@ -551,10 +808,12 @@ function logSummary(result: SyncResult, options: SyncOptions): void {
     ? "report-only"
     : options.dryRun
       ? "dry-run"
-      : "sync";
+      : options.mode;
   logger.info(`Finished (${mode}): ${parts.join(", ")}`);
 }
 
 export function shouldExitWithError(result: SyncResult): boolean {
   return result.errors > 0 || result.skipped > 0;
 }
+
+export { MONETIZATION_TYPES };

@@ -1,4 +1,4 @@
-import type { NotionRow, SyncStatus } from "../types.js";
+import type { NotionRow } from "../types.js";
 
 export type SyncAction = "create" | "update" | "skip";
 
@@ -8,42 +8,38 @@ export interface SyncCandidate {
   reason?: string;
 }
 
-const UPDATE_STATUSES: SyncStatus[] = ["Pending", "Error", "Skipped"];
+export type ClassifyMode = "sync" | "update";
 
 export interface ClassifyOptions {
-  force?: boolean;
+  mode: ClassifyMode;
+  robloxIdForTarget?: number | null;
 }
 
 export function classifyRow(
   row: NotionRow,
-  options: ClassifyOptions = {},
+  options: ClassifyOptions,
 ): SyncCandidate {
-  const force = options.force ?? false;
+  const robloxId =
+    options.robloxIdForTarget !== undefined
+      ? options.robloxIdForTarget
+      : row.robloxId;
 
-  if (row.syncStatus === "Synced") {
-    if (!force) {
-      return { row, action: "skip", reason: "Sync Status is Synced" };
-    }
-    if (row.robloxId === null) {
+  if (options.mode === "sync") {
+    if (robloxId === null) {
       return { row, action: "create" };
     }
-    return { row, action: "update" };
+    return { row, action: "skip", reason: "Roblox ID already set" };
   }
 
-  if (row.robloxId === null) {
-    return { row, action: "create" };
+  if (robloxId === null) {
+    return { row, action: "skip", reason: "Roblox ID is empty" };
   }
-
-  if (UPDATE_STATUSES.includes(row.syncStatus)) {
-    return { row, action: "update" };
-  }
-
-  return { row, action: "skip", reason: `Unhandled Sync Status: ${row.syncStatus}` };
+  return { row, action: "update" };
 }
 
 export function classifyRows(
   rows: NotionRow[],
-  options: ClassifyOptions = {},
+  options: ClassifyOptions,
 ): SyncCandidate[] {
   return rows.map((row) => classifyRow(row, options));
 }

@@ -66,7 +66,11 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 BINARY_PATH="$WORK_DIR/$BIN_NAME"
 
 echo "Compiling src/cli.ts for $BUN_TARGET ..."
-bun build src/cli.ts --compile --target="$BUN_TARGET" --outfile="$BINARY_PATH"
+bun build src/cli.ts \
+  --compile \
+  --target="$BUN_TARGET" \
+  --define "NTN_ROBLOX_VERSION=\"$VERSION\"" \
+  --outfile="$BINARY_PATH"
 
 if [[ "$BIN_NAME" != *.exe ]]; then
   chmod +x "$BINARY_PATH"

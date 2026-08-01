@@ -36,12 +36,17 @@ const CONFIGURED_DB_FIELDS = [
     valueKey: "NOTION_BADGE_DB_ID" as const,
     tomlKey: "badge_db_id",
   },
+  {
+    valueKey: "NOTION_ASSET_DB_ID" as const,
+    tomlKey: "asset_db_id",
+  },
 ] as const;
 
 const CREATED_DB_LINES = [
   { label: DATABASE_TITLES.developerProduct, idKey: "devProductDbId" as const },
   { label: DATABASE_TITLES.gamePass, idKey: "gamePassDbId" as const },
   { label: DATABASE_TITLES.badge, idKey: "badgeDbId" as const },
+  { label: DATABASE_TITLES.asset, idKey: "assetDbId" as const },
 ] as const;
 
 function assertNoConfiguredDatabaseIds(config: CreateDatabasesConfig): void {
