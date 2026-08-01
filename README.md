@@ -33,7 +33,7 @@ Or in `rokit.toml`:
 
 ```toml
 [tools]
-ntn-roblox = "Zac134/NotionToRoblox@0.2.0"
+ntn-roblox = "Zac134/NotionToRoblox@0.2.1"
 ```
 
 ```bash
@@ -267,7 +267,7 @@ npm run sync -- --dry-run
 npm run update -- --dry-run
 ```
 
-Release: `npm run compile -- 0.2.0 bun-darwin-arm64 ./release`
+Release: `npm run compile -- 0.2.1 bun-darwin-arm64 ./release`
 
 </details>
 
