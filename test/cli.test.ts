@@ -37,6 +37,6 @@ describe("cli", () => {
   });
 
   it("exports VERSION from package.json", () => {
-    assert.match(VERSION, /^0\.2\.0$/);
+    assert.match(VERSION, /^0\.2\.1$/);
   });
 });
