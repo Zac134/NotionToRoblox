@@ -1,4 +1,10 @@
-export type ResourceType = "developer-product" | "game-pass" | "badge";
+import type { SupportedAssetType } from "./assetTypes.js";
+
+export type ResourceType =
+  | "developer-product"
+  | "game-pass"
+  | "badge"
+  | "asset";
 
 export const SYNC_STATUSES = ["Pending", "Synced", "Error", "Skipped"] as const;
 export type SyncStatus = (typeof SYNC_STATUSES)[number];
@@ -9,6 +15,7 @@ export interface NotionRowBase {
   description: string;
   iconUrl: string | null;
   robloxId: number | null;
+  robloxIds?: Record<string, number | null>;
   syncStatus: SyncStatus;
   syncError: string;
   lastSyncedAt: string | null;
@@ -31,7 +38,17 @@ export interface BadgeRow extends NotionRowBase {
   isActive: boolean;
 }
 
-export type NotionRow = DeveloperProductRow | GamePassRow | BadgeRow;
+export interface AssetRow extends NotionRowBase {
+  type: "asset";
+  assetType: SupportedAssetType;
+  fileUrl: string | null;
+}
+
+export type NotionRow =
+  | DeveloperProductRow
+  | GamePassRow
+  | BadgeRow
+  | AssetRow;
 
 export interface RowMappingError {
   pageId: string;
@@ -42,6 +59,7 @@ export interface WritebackPayload {
   syncStatus: SyncStatus;
   syncError?: string;
   robloxId?: number;
+  robloxIdTargetKey?: string | null;
   lastSyncedAt?: string;
 }
 
@@ -128,6 +146,27 @@ export interface FileUpload {
   filename: string;
   mimeType: string;
 }
+
+export interface RobloxAsset {
+  assetId: number;
+  name: string;
+  assetType: SupportedAssetType;
+}
+
+export interface AssetInput {
+  name: string;
+  description?: string;
+  assetType: SupportedAssetType;
+  file: FileUpload;
+}
+
+export interface AssetUpdateInput {
+  name?: string;
+  description?: string;
+  file?: FileUpload;
+}
+
+export type RobloxAssetOperation = "create" | "update";
 
 export function extractDefaultPrice(
   priceInformation: RobloxPriceInformation | undefined,

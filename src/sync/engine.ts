@@ -78,6 +78,7 @@ const TYPE_LABELS: Record<ResourceType, string> = {
   "developer-product": "Developer Product",
   "game-pass": "Game Pass",
   badge: "Badge",
+  asset: "Asset",
 };
 
 interface TypeSyncContext {
@@ -219,6 +220,11 @@ function mapPage(
       return mapGamePassPage(page);
     case "badge":
       return mapBadgePage(page);
+    case "asset":
+      return {
+        pageId: page.id,
+        message: "Asset row mapping is not implemented yet",
+      };
   }
 }
 
@@ -246,6 +252,8 @@ async function listRobloxItemsForOrphans(
         name: item.name,
         enabled: item.enabled,
       }));
+    case "asset":
+      return [];
   }
 }
 
@@ -313,7 +321,11 @@ async function processCreate(
     }
   }
 
-  if (row.type !== "badge" && row.price === null) {
+  if (
+    row.type !== "badge" &&
+    row.type !== "asset" &&
+    row.price === null
+  ) {
     const reason = "Price is required for create";
     logger.error(`${label}: ${reason}`);
     if (!context.dryRun) {
@@ -445,6 +457,8 @@ async function createRobloxItem(
         },
         badgeQuota,
       );
+    case "asset":
+      throw new Error("Asset sync is not implemented yet");
   }
 }
 
@@ -481,6 +495,8 @@ async function updateRobloxItem(
         icon,
       });
       return;
+    case "asset":
+      throw new Error("Asset sync is not implemented yet");
   }
 }
 

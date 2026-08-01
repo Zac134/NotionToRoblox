@@ -12,6 +12,7 @@ const TYPE_LABELS: Record<ResourceType, string> = {
   "developer-product": "Developer Product",
   "game-pass": "Game Pass",
   badge: "Badge",
+  asset: "Asset",
 };
 
 export async function ensureSyncStatusSchemas(

@@ -24,6 +24,8 @@ export function databaseIdForType(type: ResourceType): string {
       return getConfig().NOTION_GAMEPASS_DB_ID;
     case "badge":
       return getConfig().NOTION_BADGE_DB_ID;
+    case "asset":
+      return getConfig().NOTION_ASSET_DB_ID;
   }
 }
 
