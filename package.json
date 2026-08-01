@@ -36,7 +36,7 @@
     "npm": ">=10.9.2"
   },
   "dependencies": {
-    "@notionhq/client": "^2.2.15",
+    "@notionhq/client": "^5.23.2",
     "smol-toml": "^1.7.0",
     "zod": "^3.24.2"
   },
