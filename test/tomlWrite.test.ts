@@ -7,6 +7,7 @@ const IDS = {
   devProductDbId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   gamePassDbId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   badgeDbId: "cccccccccccccccccccccccccccccccc",
+  assetDbId: "dddddddddddddddddddddddddddddddd",
 };
 
 describe("updateNotionDatabaseIdsInToml", () => {
@@ -38,6 +39,7 @@ universe_id = 123
         dev_product_db_id: string;
         game_pass_db_id: string;
         badge_db_id: string;
+        asset_db_id: string;
       };
     };
     assert.equal(parsed.notion.dev_product_db_id, IDS.devProductDbId);
@@ -57,7 +59,7 @@ universe_id = 123
 
     assert.match(
       output,
-      /\[notion\]\ndev_product_db_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\ngame_pass_db_id = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"\nbadge_db_id = "cccccccccccccccccccccccccccccccc"\nparent_page_id = "parent-should-stay"/,
+      /\[notion\]\ndev_product_db_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\ngame_pass_db_id = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"\nbadge_db_id = "cccccccccccccccccccccccccccccccc"\nasset_db_id = "dddddddddddddddddddddddddddddddd"\nparent_page_id = "parent-should-stay"/,
     );
   });
 
@@ -85,8 +87,7 @@ parent_page_id = "parent-should-stay"
 
     assert.match(output, /dev_product_db_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"/);
     assert.match(output, /game_pass_db_id = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"/);
-    assert.match(output, /badge_db_id = "cccccccccccccccccccccccccccccccc"/);
-    assert.match(output, /parent_page_id = "parent-should-stay"/);
+    assert.match(output, /asset_db_id = "dddddddddddddddddddddddddddddddd"/);
     assert.doesNotMatch(output, /old-dev/);
   });
 

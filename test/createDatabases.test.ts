@@ -10,12 +10,14 @@ const CREATED_IDS = {
   devProductDbId: "11111111111111111111111111111111",
   gamePassDbId: "22222222222222222222222222222222",
   badgeDbId: "33333333333333333333333333333333",
+  assetDbId: "44444444444444444444444444444444",
 };
 
 const DB_CREATE_ORDER = [
   CREATED_IDS.devProductDbId,
   CREATED_IDS.gamePassDbId,
   CREATED_IDS.badgeDbId,
+  CREATED_IDS.assetDbId,
 ];
 
 function makeConfig(overrides: Partial<Config> = {}): Config {
@@ -25,8 +27,11 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     NOTION_DEVPRODUCT_DB_ID: "",
     NOTION_GAMEPASS_DB_ID: "",
     NOTION_BADGE_DB_ID: "",
+    NOTION_ASSET_DB_ID: "",
     NOTION_PARENT_PAGE_ID: "parent-page-id-1234567890123456",
+    NOTION_IS_INLINE: true,
     ROBLOX_UNIVERSE_ID: 0,
+    ROBLOX_UNIVERSES: {},
     ROBLOX_BADGE_PAYMENT_SOURCE: "user",
     LOG_LEVEL: "info",
     ...overrides,
@@ -101,7 +106,7 @@ describe("runCreateDatabases", () => {
 
     assert.deepEqual(result, CREATED_IDS);
     assert.equal(pagesRetrieve.mock.callCount(), 1);
-    assert.equal(databasesCreate.mock.callCount(), 3);
+    assert.equal(databasesCreate.mock.callCount(), 4);
   });
 
   it("throws when database IDs are already configured", async () => {
@@ -134,7 +139,7 @@ describe("runCreateDatabases", () => {
     );
 
     assert.deepEqual(result, CREATED_IDS);
-    assert.equal(databasesCreate.mock.callCount(), 3);
+    assert.equal(databasesCreate.mock.callCount(), 4);
   });
 
   it("writes created database IDs to TOML by default", async () => {
@@ -151,6 +156,7 @@ describe("runCreateDatabases", () => {
         dev_product_db_id: string;
         game_pass_db_id: string;
         badge_db_id: string;
+        asset_db_id: string;
         parent_page_id: string;
       };
     };
@@ -158,6 +164,7 @@ describe("runCreateDatabases", () => {
     assert.equal(parsed.notion.dev_product_db_id, CREATED_IDS.devProductDbId);
     assert.equal(parsed.notion.game_pass_db_id, CREATED_IDS.gamePassDbId);
     assert.equal(parsed.notion.badge_db_id, CREATED_IDS.badgeDbId);
+    assert.equal(parsed.notion.asset_db_id, CREATED_IDS.assetDbId);
     assert.equal(
       parsed.notion.parent_page_id,
       "parent-page-id-1234567890123456",

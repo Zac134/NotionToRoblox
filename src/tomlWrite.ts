@@ -2,6 +2,7 @@ export type NotionDatabaseIds = {
   devProductDbId: string;
   gamePassDbId: string;
   badgeDbId: string;
+  assetDbId: string;
 };
 
 const NOTION_DB_KEYS: Array<{
@@ -11,6 +12,7 @@ const NOTION_DB_KEYS: Array<{
   { field: "devProductDbId", tomlKey: "dev_product_db_id" },
   { field: "gamePassDbId", tomlKey: "game_pass_db_id" },
   { field: "badgeDbId", tomlKey: "badge_db_id" },
+  { field: "assetDbId", tomlKey: "asset_db_id" },
 ];
 
 function escapeRegExp(value: string): string {

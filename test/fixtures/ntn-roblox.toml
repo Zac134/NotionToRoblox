@@ -2,9 +2,11 @@
 dev_product_db_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 game_pass_db_id   = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 badge_db_id       = "cccccccccccccccccccccccccccccccc"
+asset_db_id       = "dddddddddddddddddddddddddddddddd"
 
 [roblox]
-universe_id = 1234567890
+universe_id = 123456789
+asset_creator = { is_group = false, id = 87654321 }
 
 [logging]
 level = "info"

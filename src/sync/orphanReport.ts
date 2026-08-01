@@ -17,13 +17,22 @@ const TYPE_LABELS: Record<ResourceType, string> = {
   "developer-product": "Developer Product",
   "game-pass": "Game Pass",
   badge: "Badge",
+  asset: "Asset",
 };
 
 export function collectNotionRobloxIds(
-  rows: Array<{ robloxId: number | null }>,
+  rows: Array<{ robloxId: number | null; robloxIds?: Record<string, number | null> }>,
+  targetKey: string | null = null,
 ): Set<number> {
   const ids = new Set<number>();
   for (const row of rows) {
+    if (targetKey !== null && row.robloxIds) {
+      const id = row.robloxIds[targetKey];
+      if (id !== null && id !== undefined) {
+        ids.add(id);
+      }
+      continue;
+    }
     if (row.robloxId !== null) {
       ids.add(row.robloxId);
     }
@@ -45,15 +54,16 @@ export function countOrphans(sections: OrphanReportSection[]): number {
 }
 
 export function printOrphanReport(sections: OrphanReportSection[]): void {
-  const totalOrphans = countOrphans(sections);
+  const filteredSections = sections.filter((section) => section.type !== "asset");
+  const totalOrphans = countOrphans(filteredSections);
 
   console.log("");
   console.log("Roblox items not referenced in Notion");
   console.log(`Total: ${totalOrphans}`);
   console.log("");
 
-  sections.forEach((section, index) => {
-    const isLast = index === sections.length - 1;
+  filteredSections.forEach((section, index) => {
+    const isLast = index === filteredSections.length - 1;
     const branch = isLast ? "└──" : "├──";
     const childPrefix = isLast ? "    " : "│   ";
     const label = TYPE_LABELS[section.type];

@@ -24,11 +24,18 @@ describe("badge quota consumption", () => {
         }),
         writebackError: mock.fn(async () => {}),
         writebackSkipped: mock.fn(async () => {}),
+        writebackAggregatedTargetResults: mock.fn(async () => {}),
+        aggregateTargetResults: mock.fn(() => ({
+          syncStatus: "Synced",
+          syncError: "",
+          robloxIds: {},
+        })),
       },
     });
     mock.module("../src/util/download.js", {
       namedExports: {
         downloadFile: mock.fn(async () => undefined),
+        MAX_ASSET_DOWNLOAD_BYTES: 20 * 1024 * 1024,
       },
     });
 
@@ -49,6 +56,7 @@ describe("badge quota consumption", () => {
     const result = await processCandidate(candidate, {
       dryRun: false,
       badgeQuota,
+      targetKey: null,
     });
 
     assert.equal(result.outcome, "error");

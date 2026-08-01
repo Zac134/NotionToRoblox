@@ -106,7 +106,7 @@ level = "info"
           env: { NOTION_TOKEN: "create-db-token" },
           tomlPath,
         }),
-      /parent page ID is required for create-databases/,
+      /parent page ID is required for create-db/,
     );
   });
 
@@ -129,22 +129,23 @@ parent_page_id = "parent"
 });
 
 describe("loadSyncConfig", () => {
-  it("loads when NOTION_TOKEN, ROBLOX_API_KEY, and database IDs are present", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ntn-sync-config-"));
-    const tomlPath = writeToml(
-      dir,
-      `[notion]
+  const syncTomlBase = `[notion]
 dev_product_db_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 game_pass_db_id   = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 badge_db_id       = "cccccccccccccccccccccccccccccccc"
+asset_db_id       = "dddddddddddddddddddddddddddddddd"
 
 [roblox]
 universe_id = 987654321
+asset_creator = { is_group = false, id = 87654321 }
 
 [logging]
 level = "warn"
-`,
-    );
+`;
+
+  it("loads when NOTION_TOKEN, ROBLOX_API_KEY, and database IDs are present", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ntn-sync-config-"));
+    const tomlPath = writeToml(dir, syncTomlBase);
 
     const config = loadSyncConfig({
       env: {
@@ -160,7 +161,16 @@ level = "warn"
       config.NOTION_DEVPRODUCT_DB_ID,
       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     );
+    assert.equal(
+      config.NOTION_ASSET_DB_ID,
+      "dddddddddddddddddddddddddddddddd",
+    );
     assert.equal(config.ROBLOX_UNIVERSE_ID, 987654321);
+    assert.equal(config.NOTION_IS_INLINE, true);
+    assert.deepEqual(config.ROBLOX_ASSET_CREATOR, {
+      is_group: false,
+      id: 87654321,
+    });
     assert.equal(config.LOG_LEVEL, "warn");
   });
 
@@ -168,14 +178,7 @@ level = "warn"
     const dir = mkdtempSync(join(tmpdir(), "ntn-sync-config-"));
     const tomlPath = writeToml(
       dir,
-      `[notion]
-dev_product_db_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-game_pass_db_id   = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-badge_db_id       = "cccccccccccccccccccccccccccccccc"
-
-[roblox]
-universe_id = 123
-`,
+      syncTomlBase.replace("[logging]\nlevel = \"warn\"\n", ""),
     );
 
     assert.throws(
@@ -190,17 +193,7 @@ universe_id = 123
 
   it("throws when NOTION_TOKEN is missing", () => {
     const dir = mkdtempSync(join(tmpdir(), "ntn-sync-config-"));
-    const tomlPath = writeToml(
-      dir,
-      `[notion]
-dev_product_db_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-game_pass_db_id   = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-badge_db_id       = "cccccccccccccccccccccccccccccccc"
-
-[roblox]
-universe_id = 123
-`,
-    );
+    const tomlPath = writeToml(dir, syncTomlBase);
 
     assert.throws(
       () =>
@@ -209,6 +202,29 @@ universe_id = 123
           tomlPath,
         }),
       /NOTION_TOKEN.*Required/,
+    );
+  });
+
+  it("throws when asset_db_id is configured without asset_creator", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ntn-sync-config-"));
+    const tomlPath = writeToml(
+      dir,
+      syncTomlBase.replace(
+        "asset_creator = { is_group = false, id = 87654321 }\n",
+        "",
+      ),
+    );
+
+    assert.throws(
+      () =>
+        loadSyncConfig({
+          env: {
+            NOTION_TOKEN: "sync-notion",
+            ROBLOX_API_KEY: "sync-roblox",
+          },
+          tomlPath,
+        }),
+      /asset_creator.*required/i,
     );
   });
 
@@ -221,9 +237,11 @@ parent_page_id = ""
 dev_product_db_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 game_pass_db_id   = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 badge_db_id       = "cccccccccccccccccccccccccccccccc"
+asset_db_id       = "dddddddddddddddddddddddddddddddd"
 
 [roblox]
 universe_id = 123
+asset_creator = { is_group = false, id = 87654321 }
 `,
     );
 

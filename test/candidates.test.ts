@@ -4,34 +4,49 @@ import { classifyRow } from "../src/sync/candidates.js";
 import { makeRow } from "./helpers.js";
 
 describe("classifyRow", () => {
-  it("skips Synced rows when force is false", () => {
-    const row = makeRow({ syncStatus: "Synced", robloxId: 123 });
-    const result = classifyRow(row);
-    assert.equal(result.action, "skip");
-    assert.match(result.reason ?? "", /Synced/);
-  });
-
-  it("creates Synced rows without robloxId when force is true", () => {
-    const row = makeRow({ syncStatus: "Synced", robloxId: null });
-    const result = classifyRow(row, { force: true });
-    assert.equal(result.action, "create");
-  });
-
-  it("updates Synced rows with robloxId when force is true", () => {
-    const row = makeRow({ syncStatus: "Synced", robloxId: 456 });
-    const result = classifyRow(row, { force: true });
-    assert.equal(result.action, "update");
-  });
-
-  it("creates rows without robloxId", () => {
-    const row = makeRow({ syncStatus: "Pending", robloxId: null });
-    assert.equal(classifyRow(row).action, "create");
-  });
-
-  for (const syncStatus of ["Pending", "Error", "Skipped"] as const) {
-    it(`updates rows with robloxId when syncStatus is ${syncStatus}`, () => {
-      const row = makeRow({ syncStatus, robloxId: 789 });
-      assert.equal(classifyRow(row).action, "update");
+  describe("sync mode", () => {
+    it("creates rows without robloxId", () => {
+      const row = makeRow({ syncStatus: "Pending", robloxId: null });
+      assert.equal(classifyRow(row, { mode: "sync" }).action, "create");
     });
-  }
+
+    it("skips rows with robloxId set regardless of Sync Status", () => {
+      const row = makeRow({ syncStatus: "Synced", robloxId: 123 });
+      const result = classifyRow(row, { mode: "sync" });
+      assert.equal(result.action, "skip");
+      assert.match(result.reason ?? "", /already set/);
+    });
+
+    it("uses robloxIdForTarget when provided", () => {
+      const row = makeRow({ robloxId: null, robloxIds: { main: 456 } });
+      const result = classifyRow(row, {
+        mode: "sync",
+        robloxIdForTarget: 456,
+      });
+      assert.equal(result.action, "skip");
+    });
+  });
+
+  describe("update mode", () => {
+    it("updates rows with robloxId", () => {
+      const row = makeRow({ syncStatus: "Pending", robloxId: 789 });
+      assert.equal(classifyRow(row, { mode: "update" }).action, "update");
+    });
+
+    it("skips rows without robloxId regardless of Sync Status", () => {
+      const row = makeRow({ syncStatus: "Synced", robloxId: null });
+      const result = classifyRow(row, { mode: "update" });
+      assert.equal(result.action, "skip");
+      assert.match(result.reason ?? "", /empty/);
+    });
+
+    it("uses robloxIdForTarget when provided", () => {
+      const row = makeRow({ robloxId: 999, robloxIds: { main: null } });
+      const result = classifyRow(row, {
+        mode: "update",
+        robloxIdForTarget: null,
+      });
+      assert.equal(result.action, "skip");
+    });
+  });
 });

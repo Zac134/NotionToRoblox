@@ -5,6 +5,7 @@ import type {
 } from "@notionhq/client/build/src/api-endpoints.js";
 import { notionRateLimiter } from "../util/rateLimit.js";
 import {
+  assetDatabaseProperties,
   badgeDatabaseProperties,
   DATABASE_TITLES,
   developerProductDatabaseProperties,
@@ -15,6 +16,7 @@ export interface CreatedDatabaseIds {
   devProductDbId: string;
   gamePassDbId: string;
   badgeDbId: string;
+  assetDbId: string;
 }
 
 export type PartialCreatedDatabaseIds = Partial<CreatedDatabaseIds>;
@@ -49,6 +51,11 @@ const DATABASE_SPECS = [
     title: DATABASE_TITLES.badge,
     properties: badgeDatabaseProperties,
     idKey: "badgeDbId" as const,
+  },
+  {
+    title: DATABASE_TITLES.asset,
+    properties: assetDatabaseProperties,
+    idKey: "assetDbId" as const,
   },
 ] as const;
 

@@ -5,6 +5,8 @@ import {
   validateDownloadUrl,
 } from "./urlSafety.js";
 
+export const MAX_ASSET_DOWNLOAD_BYTES = 20 * 1024 * 1024;
+
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 export interface DownloadedFile {
@@ -16,6 +18,7 @@ export interface DownloadedFile {
 export async function downloadFile(
   url: string,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  maxBytes = MAX_DOWNLOAD_BYTES,
 ): Promise<DownloadedFile> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -31,10 +34,7 @@ export async function downloadFile(
       );
     }
 
-    const buffer = await readResponseBodyLimited(
-      response,
-      MAX_DOWNLOAD_BYTES,
-    );
+    const buffer = await readResponseBodyLimited(response, maxBytes);
     const filename = filenameFromUrl(finalUrl);
     const mimeType =
       response.headers.get("content-type")?.split(";")[0]?.trim() ||
@@ -145,14 +145,47 @@ function filenameFromUrl(url: string): string {
 
 function guessMimeType(filename: string): string {
   const lower = filename.toLowerCase();
+  if (lower.endsWith(".png")) {
+    return "image/png";
+  }
   if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
     return "image/jpeg";
+  }
+  if (lower.endsWith(".bmp")) {
+    return "image/bmp";
+  }
+  if (lower.endsWith(".tga")) {
+    return "image/tga";
   }
   if (lower.endsWith(".webp")) {
     return "image/webp";
   }
   if (lower.endsWith(".gif")) {
     return "image/gif";
+  }
+  if (lower.endsWith(".mp3")) {
+    return "audio/mpeg";
+  }
+  if (lower.endsWith(".ogg")) {
+    return "audio/ogg";
+  }
+  if (lower.endsWith(".wav")) {
+    return "audio/wav";
+  }
+  if (lower.endsWith(".flac")) {
+    return "audio/flac";
+  }
+  if (lower.endsWith(".fbx")) {
+    return "model/fbx";
+  }
+  if (lower.endsWith(".gltf")) {
+    return "model/gltf+json";
+  }
+  if (lower.endsWith(".glb")) {
+    return "model/gltf-binary";
+  }
+  if (lower.endsWith(".rbxm") || lower.endsWith(".rbxmx")) {
+    return "model/x-rbxm";
   }
   return "image/png";
 }

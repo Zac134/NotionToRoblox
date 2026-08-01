@@ -1,5 +1,8 @@
 import type { PageObjectResponse } from "@notionhq/client/build/src/api-endpoints.js";
+import { isSupportedAssetType } from "../assetTypes.js";
+import { getUniverseKeys, isMultiUniverseMode } from "../config.js";
 import type {
+  AssetRow,
   BadgeRow,
   DeveloperProductRow,
   GamePassRow,
@@ -8,6 +11,7 @@ import type {
   SyncStatus,
 } from "../types.js";
 import { SYNC_STATUSES } from "../types.js";
+import { ASSET_PROPERTY_NAMES, robloxIdPropertyName } from "./propertyNames.js";
 
 const PROPERTY = {
   name: "Name",
@@ -25,7 +29,7 @@ const PROPERTY = {
 export function mapDeveloperProductPage(
   page: PageObjectResponse,
 ): DeveloperProductRow | RowMappingError {
-  const base = mapBasePage(page, "developer-product");
+  const base = mapMonetizationBasePage(page);
   if ("message" in base) {
     return base;
   }
@@ -41,7 +45,7 @@ export function mapDeveloperProductPage(
 export function mapGamePassPage(
   page: PageObjectResponse,
 ): GamePassRow | RowMappingError {
-  const base = mapBasePage(page, "game-pass");
+  const base = mapMonetizationBasePage(page);
   if ("message" in base) {
     return base;
   }
@@ -57,7 +61,7 @@ export function mapGamePassPage(
 export function mapBadgePage(
   page: PageObjectResponse,
 ): BadgeRow | RowMappingError {
-  const base = mapBasePage(page, "badge");
+  const base = mapMonetizationBasePage(page);
   if ("message" in base) {
     return base;
   }
@@ -69,9 +73,61 @@ export function mapBadgePage(
   };
 }
 
-function mapBasePage(
+export function mapAssetPage(
   page: PageObjectResponse,
-  _type: NotionRow["type"],
+): AssetRow | RowMappingError {
+  const pageId = page.id;
+
+  try {
+    const name = readTitle(page, PROPERTY.name);
+    if (!name) {
+      return { pageId, message: `Missing required property: ${PROPERTY.name}` };
+    }
+
+    const syncStatus = readSyncStatus(page, PROPERTY.syncStatus);
+    if (!syncStatus) {
+      return {
+        pageId,
+        message: `Missing or invalid ${PROPERTY.syncStatus}. Expected one of: ${SYNC_STATUSES.join(", ")}`,
+      };
+    }
+
+    const assetTypeRaw = readSelect(page, ASSET_PROPERTY_NAMES.assetType);
+    if (!assetTypeRaw) {
+      return {
+        pageId,
+        message: `Missing required property: ${ASSET_PROPERTY_NAMES.assetType}`,
+      };
+    }
+    if (!isSupportedAssetType(assetTypeRaw)) {
+      return {
+        pageId,
+        message: `Invalid ${ASSET_PROPERTY_NAMES.assetType}: ${assetTypeRaw}. Expected one of: Animation, Audio, Decal, Image, Model`,
+      };
+    }
+
+    return {
+      pageId,
+      name,
+      description: readRichText(page, PROPERTY.description),
+      iconUrl: null,
+      robloxId: readOptionalNumber(page, PROPERTY.robloxId),
+      syncStatus,
+      syncError: readRichText(page, PROPERTY.syncError),
+      lastSyncedAt: readOptionalDate(page, PROPERTY.lastSyncedAt),
+      type: "asset",
+      assetType: assetTypeRaw,
+      fileUrl: readFirstFileUrl(page, ASSET_PROPERTY_NAMES.file),
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown mapping error";
+    return { pageId, message };
+  }
+}
+
+function mapMonetizationBasePage(
+  page: PageObjectResponse,
 ): (Omit<NotionRow, "type"> & { type?: never }) | RowMappingError {
   const pageId = page.id;
 
@@ -89,12 +145,15 @@ function mapBasePage(
       };
     }
 
+    const robloxIds = readRobloxIds(page);
+
     return {
       pageId,
       name,
       description: readRichText(page, PROPERTY.description),
       iconUrl: readFirstFileUrl(page, PROPERTY.icon),
-      robloxId: readOptionalNumber(page, PROPERTY.robloxId),
+      robloxId: robloxIds.robloxId,
+      ...(robloxIds.robloxIds !== undefined ? { robloxIds: robloxIds.robloxIds } : {}),
       syncStatus,
       syncError: readRichText(page, PROPERTY.syncError),
       lastSyncedAt: readOptionalDate(page, PROPERTY.lastSyncedAt),
@@ -104,6 +163,26 @@ function mapBasePage(
       error instanceof Error ? error.message : "Unknown mapping error";
     return { pageId, message };
   }
+}
+
+function readRobloxIds(page: PageObjectResponse): {
+  robloxId: number | null;
+  robloxIds?: Record<string, number | null>;
+} {
+  if (isMultiUniverseMode()) {
+    const robloxIds: Record<string, number | null> = {};
+    for (const key of getUniverseKeys()) {
+      robloxIds[key] = readOptionalNumber(
+        page,
+        robloxIdPropertyName(key),
+      );
+    }
+    return { robloxId: null, robloxIds };
+  }
+
+  return {
+    robloxId: readOptionalNumber(page, robloxIdPropertyName(null)),
+  };
 }
 
 function readTitle(page: PageObjectResponse, propertyName: string): string {
@@ -126,6 +205,14 @@ function readRichText(page: PageObjectResponse, propertyName: string): string {
     throw new Error(`Property "${propertyName}" is not a rich_text property`);
   }
   return property.rich_text.map((item) => item.plain_text).join("");
+}
+
+function readSelect(page: PageObjectResponse, propertyName: string): string | null {
+  const property = page.properties[propertyName];
+  if (!property || property.type !== "select") {
+    return null;
+  }
+  return property.select?.name ?? null;
 }
 
 function readOptionalNumber(
